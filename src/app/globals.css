@@ -1,26 +1,154 @@
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@layer base {
+  * {
+    @apply border-gray-700;
+  }
+  body {
+    @apply bg-gray-900 text-gray-100;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@layer components {
+  .bg-gradient-dark {
+    background: linear-gradient(135deg, rgb(26, 26, 46) 0%, rgb(37, 42, 52) 100%);
+  }
+
+  .bg-card-dark {
+    @apply bg-gray-800 border border-gray-700 backdrop-blur-sm;
+  }
+
+  .text-foreground {
+    @apply text-gray-100;
+  }
+
+  .text-muted-foreground {
+    @apply text-gray-400;
+  }
+
+  .bg-background {
+    @apply bg-gray-900;
+  }
+
+  .bg-muted {
+    @apply bg-gray-800;
+  }
+
+  .bg-input {
+    @apply bg-gray-800;
+  }
+
+  .border-border {
+    @apply border-gray-700;
+  }
+
+  .bg-primary {
+    @apply bg-blue-500;
+  }
+
+  .text-primary {
+    @apply text-blue-400;
+  }
+
+  .bg-primary\/20 {
+    @apply bg-blue-500/20;
+  }
+
+  .bg-primary\/10 {
+    @apply bg-blue-500/10;
+  }
+
+  .hover\:bg-primary\/90:hover {
+    @apply hover:bg-blue-600;
+  }
+
+  .bg-card {
+    @apply bg-gray-800;
+  }
+
+  .ring-primary {
+    @apply ring-blue-500;
+  }
+
+  .border-primary {
+    @apply border-blue-500;
+  }
+
+  .border-primary\/20 {
+    @apply border-blue-500/20;
+  }
+
+  /* 상태 색상 */
+  .text-status-online {
+    @apply text-green-400;
+  }
+
+  .text-status-offline {
+    @apply text-red-400;
+  }
+
+  .text-status-warning {
+    @apply text-yellow-400;
+  }
+
+  .bg-status-online {
+    @apply bg-green-500;
+  }
+
+  .bg-status-offline {
+    @apply bg-red-500;
+  }
+
+  .bg-status-warning {
+    @apply bg-yellow-500;
+  }
+}
+
+/* 스크롤바 스타일 */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-gray-800;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-gray-600 rounded;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-gray-500;
+}
+
+/* 애니메이션 */
+.fade-in {
+  animation: fadeIn 0.5s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.pulse-slow {
+  animation: pulse 3s infinite;
+}
+
+/* 차트 스타일 */
+.recharts-cartesian-axis-tick-value {
+  fill: rgb(156, 163, 175);
+}
+
+.recharts-legend-item-text {
+  color: rgb(156, 163, 175) !important;
 }
