@@ -135,6 +135,25 @@ export default function LoginPage() {
           </CardContent>
         </Card>
 
+        {/* 임시 테스트용 버튼 - 나중에 삭제 예정 */}
+        <Card className="mt-4 border-yellow-500/30 bg-yellow-900/10">
+          <CardContent className="p-4">
+            <div className="text-center">
+              <p className="text-yellow-400 text-sm mb-3">⚠️ 테스트 전용 (나중에 삭제 예정)</p>
+              <button
+                onClick={() => {
+                  // 테스트용 임시 토큰 설정
+                  localStorage.setItem('authToken', 'test-token-for-development');
+                  router.push('/dashboard');
+                }}
+                className="w-full bg-yellow-600 hover:bg-yellow-700 text-white font-medium py-2 px-4 rounded-md transition-colors duration-200"
+              >
+                로그인 없이 대시보드로 이동
+              </button>
+            </div>
+          </CardContent>
+        </Card>
+
         <div className="mt-8 text-center">
           <p className="text-xs text-gray-400">
             © 2025 ZetaCube. All rights reserved.
