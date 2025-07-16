@@ -113,7 +113,7 @@
 }
 
 ::-webkit-scrollbar-track {
-  @apply bg-gray-800;
+  @apply bg-gray-800 rounded;
 }
 
 ::-webkit-scrollbar-thumb {
@@ -121,6 +121,43 @@
 }
 
 ::-webkit-scrollbar-thumb:hover {
+  @apply bg-gray-500;
+}
+
+/* 커스텀 스크롤바 클래스 */
+.scrollbar-thin {
+  scrollbar-width: thin;
+}
+
+.scrollbar-thumb-gray-600 {
+  scrollbar-color: rgb(75 85 99) transparent;
+}
+
+.scrollbar-track-gray-800 {
+  scrollbar-color: rgb(75 85 99) rgb(31 41 55);
+}
+
+/* 커스텀 스크롤바 */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(75 85 99) rgb(31 41 55);
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  @apply bg-gray-800 rounded;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  @apply bg-gray-600 rounded;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
   @apply bg-gray-500;
 }
 
@@ -151,4 +188,48 @@
 
 .recharts-legend-item-text {
   color: rgb(156, 163, 175) !important;
+}
+
+/* 세계지도 애니메이션 */
+.map-marker-pulse {
+  animation: mapMarkerPulse 2s infinite;
+}
+
+@keyframes mapMarkerPulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.1);
+    opacity: 0.8;
+  }
+}
+
+.map-tooltip-enter {
+  animation: tooltipEnter 0.2s ease-out;
+}
+
+@keyframes tooltipEnter {
+  from {
+    opacity: 0;
+    transform: scale(0.8) translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.map-selection-ring {
+  animation: selectionRing 1.5s ease-in-out infinite;
+}
+
+@keyframes selectionRing {
+  0% {
+    stroke-dashoffset: 0;
+  }
+  100% {
+    stroke-dashoffset: 12;
+  }
 }

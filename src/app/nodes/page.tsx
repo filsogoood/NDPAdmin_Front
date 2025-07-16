@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/Card';
 import { StatusBadge } from '@/components/StatusBadge';
 import { NodeDetailModal } from '@/components/NodeDetailModal';
 import { Node } from '@/lib/types';
+import { allNodes } from '@/lib/mockData';
 import { formatRelativeTime, getPerformanceLevel } from '@/lib/utils';
 import { authService } from '@/lib/auth';
 import { 
@@ -19,7 +20,9 @@ import {
   Clock,
   MapPin,
   TrendingUp,
-  Eye
+  Eye,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 
 export default function NodesPage() {
@@ -31,14 +34,14 @@ export default function NodesPage() {
       router.push('/');
     }
   }, [router]);
-  // 빈 노드 배열을 useMemo로 메모이제이션
+  // 실제 노드 데이터를 사용
   const nodes = useMemo(() => {
-    const emptyNodes: Node[] = [];
-    return emptyNodes;
+    return allNodes;
   }, []);
   
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isNodeListCollapsed, setIsNodeListCollapsed] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [sortBy, setSortBy] = useState<'name' | 'score' | 'status' | 'location'>('score');
@@ -221,9 +224,32 @@ export default function NodesPage() {
           <CardHeader>
             <CardTitle className="flex items-center justify-between">
               <span>노드 목록 ({filteredAndSortedNodes.length}개)</span>
-              <Monitor className="h-5 w-5 text-primary" />
+              <div className="flex items-center space-x-2">
+                <Monitor className="h-5 w-5 text-primary" />
+                <button
+                  onClick={() => setIsNodeListCollapsed(!isNodeListCollapsed)}
+                  className="p-1 rounded-md hover:bg-gray-700 transition-colors"
+                  title={isNodeListCollapsed ? "목록 펼치기" : "목록 접기"}
+                >
+                  {isNodeListCollapsed ? (
+                    <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                  ) : (
+                    <ChevronUp className="h-5 w-5 text-muted-foreground" />
+                  )}
+                </button>
+              </div>
             </CardTitle>
           </CardHeader>
+          {isNodeListCollapsed && (
+            <CardContent className="pt-0">
+              <div className="text-sm text-muted-foreground">
+                온라인: {nodes.filter(n => n.status.status === 'online').length}개 | 
+                오프라인: {nodes.filter(n => n.status.status === 'offline').length}개 | 
+                점검중: {nodes.filter(n => n.status.status === 'maintenance').length}개
+              </div>
+            </CardContent>
+          )}
+          {!isNodeListCollapsed && (
           <CardContent>
             <div className="overflow-x-auto">
               <table className="w-full">
@@ -331,6 +357,7 @@ export default function NodesPage() {
               )}
             </div>
           </CardContent>
+          )}
         </Card>
 
 
