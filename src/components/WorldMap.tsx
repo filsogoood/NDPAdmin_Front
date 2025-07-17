@@ -1,37 +1,68 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { ComposableMap, Geographies, Geography, Marker, ZoomableGroup } from 'react-simple-maps';
+import { fetchAndTransformNodeData, MapNode } from '@/lib/nodeLocationMapper';
 
 const geoUrl = 'https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json';
 
-// 더 정확한 지역 좌표와 구체적인 위치 정보 (더미 데이터 제거됨)
-const sampleNodes: any[] = [];
-
 interface WorldMapProps {
   className?: string;
+  authToken?: string; // 인증 토큰을 props로 받음
 }
 
-export function WorldMap({ className = '' }: WorldMapProps) {
-  const [hoveredNode, setHoveredNode] = useState<number | null>(null);
-  const [selectedNode, setSelectedNode] = useState<number | null>(null);
+export function WorldMap({ className = '', authToken }: WorldMapProps) {
+  const [nodes, setNodes] = useState<MapNode[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [hoveredNode, setHoveredNode] = useState<string | null>(null);
+  const [selectedNode, setSelectedNode] = useState<string | null>(null);
   const [zoom, setZoom] = useState(30);
-  const [center, setCenter] = useState<[number, number]>([127.0, 37.5]); // 한국 중심 좌표
+  const [center, setCenter] = useState<[number, number]>([127.0, 37.5]);
 
-  // 노드 겹침 방지를 위한 오프셋 계산
-  const nodePositions = useMemo(() => {
+  // API에서 노드 데이터 가져오기
+  useEffect(() => {
+    const loadNodeData = async () => {
+      if (!authToken) {
+        setError('인증 토큰이 필요합니다.');
+        setLoading(false);
+        return;
+      }
+
+      try {
+        setLoading(true);
+        setError(null);
+        
+        const nodeData = await fetchAndTransformNodeData(authToken);
+        setNodes(nodeData);
+        
+        console.log('로드된 노드 데이터:', nodeData);
+        
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : '노드 데이터를 불러올 수 없습니다.';
+        setError(errorMessage);
+        console.error('노드 데이터 로딩 오류:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadNodeData();
+  }, [authToken]);
+
+  // 노드 겹침 방지를 위한 위치 조정
+  const adjustedNodes = useMemo(() => {
     const positions = new Map();
-    const gridSize = 0.02; // 그리드 크기 (도 단위)
+    const gridSize = 0.01; // 더 세밀한 그리드
     
-    sampleNodes.forEach((node) => {
+    return nodes.map((node, index) => {
       let [lng, lat] = node.coordinates;
       const key = `${Math.round(lng / gridSize)},${Math.round(lat / gridSize)}`;
       
-      // 같은 그리드에 이미 노드가 있으면 위치 조정
       if (positions.has(key)) {
         const count = positions.get(key);
-        const angle = (count * 60) * Math.PI / 180; // 60도씩 회전
-        const distance = 0.015; // 이동 거리
+        const angle = (count * 45) * Math.PI / 180; // 45도씩 회전
+        const distance = 0.008; // 더 작은 거리
         lng += Math.cos(angle) * distance;
         lat += Math.sin(angle) * distance;
         positions.set(key, count + 1);
@@ -39,72 +70,61 @@ export function WorldMap({ className = '' }: WorldMapProps) {
         positions.set(key, 1);
       }
       
-      return { ...node, adjustedCoordinates: [lng, lat] };
+      return { ...node, adjustedCoordinates: [lng, lat] as [number, number] };
     });
-    
-    return sampleNodes.map((node, index) => {
-      const [lng, lat] = node.coordinates;
-      const key = `${Math.round(lng / gridSize)},${Math.round(lat / gridSize)}`;
-      const count = Array.from(positions.keys()).indexOf(key);
-      
-      if (count > 0) {
-        const angle = (index * 60) * Math.PI / 180;
-        const distance = 0.015;
-        return {
-          ...node,
-          adjustedCoordinates: [
-            lng + Math.cos(angle) * distance,
-            lat + Math.sin(angle) * distance
-          ]
-        };
-      }
-      
-      return { ...node, adjustedCoordinates: node.coordinates };
-    });
-  }, []);
+  }, [nodes]);
 
   const getMarkerColor = (status: string) => {
-    switch (status) {
+    switch (status.toLowerCase()) {
       case 'active':
-        return '#10B981';
+      case 'online':
+      case 'running':
+        return '#10B981'; // 녹색 - 정상 활성
       case 'warning':
-        return '#F59E0B';
+      case 'caution':
+      case 'degraded':
+        return '#F59E0B'; // 주황색 - 경고
       case 'error':
-        return '#EF4444';
+      case 'failed':
+      case 'offline':
+      case 'down':
+        return '#EF4444'; // 빨간색 - 오류/오프라인
+      case 'pre':
+      case 'preparing':
+      case 'starting':
+        return '#3B82F6'; // 파란색 - 준비 중
+      case 'maintenance':
+      case 'updating':
+        return '#8B5CF6'; // 보라색 - 유지보수
+      case 'idle':
+      case 'standby':
+        return '#F97316'; // 주황색 - 대기
+      case 'unknown':
+      case 'pending':
+        return '#6B7280'; // 회색 - 알 수 없음
       default:
-        return '#6B7280';
+        return '#6B7280'; // 기본 회색
     }
   };
 
-  // 줌 레벨에 따라 노드 크기를 더 세밀하게 조정
-  const getMarkerSize = (nodeCount: number, isOverlapped: boolean = false) => {
-    // 줌이 높을수록 노드를 작게 표시
-    const zoomFactor = Math.max(0.3, 1 - (zoom - 30) / 100);
-    const baseSize = isOverlapped ? 0.8 : 1; // 겹친 노드는 더 작게
+  // 애니메이션 제거 - 깔끔한 핀 마커만 사용
+  const getMarkerAnimation = (status: string) => {
+    return ''; // 모든 애니메이션 제거
+  };
+
+  const getMarkerSize = (nodeCount: number) => {
+    const zoomFactor = Math.max(0.3, 1 - (zoom - 30) / 150);
     
-    if (nodeCount >= 15) {
-      return { 
-        outer: 2.5 * baseSize * zoomFactor, 
-        inner: 1.2 * baseSize * zoomFactor,
-        click: 3 * baseSize * zoomFactor // 클릭 영역
-      };
-    }
-    if (nodeCount >= 10) {
-      return { 
-        outer: 2 * baseSize * zoomFactor, 
-        inner: 1 * baseSize * zoomFactor,
-        click: 2.5 * baseSize * zoomFactor
-      };
-    }
+    // 모든 노드를 동일한 작은 크기로 통일
     return { 
-      outer: 1.5 * baseSize * zoomFactor, 
-      inner: 0.8 * baseSize * zoomFactor,
-      click: 2 * baseSize * zoomFactor
+      outer: 1.5 * zoomFactor, // 더 작은 원 크기
+      inner: 0.6 * zoomFactor,
+      click: 2.5 * zoomFactor // 클릭 영역도 줄임
     };
   };
 
-  const handleNodeClick = (nodeId: number, event: any) => {
-    event.stopPropagation(); // 이벤트 버블링 방지
+  const handleNodeClick = (nodeId: string, event: any) => {
+    event.stopPropagation();
     setSelectedNode(selectedNode === nodeId ? null : nodeId);
   };
 
@@ -114,23 +134,77 @@ export function WorldMap({ className = '' }: WorldMapProps) {
     setSelectedNode(null);
   };
 
-  // 겹친 노드 찾기
-  const findOverlappingNodes = (node: any) => {
-    return nodePositions.filter(n => 
-      n.id !== node.id &&
-      Math.abs(n.coordinates[0] - node.coordinates[0]) < 0.02 &&
-      Math.abs(n.coordinates[1] - node.coordinates[1]) < 0.02
-    );
+  const handleRefresh = async () => {
+    if (authToken) {
+      setLoading(true);
+      try {
+        const nodeData = await fetchAndTransformNodeData(authToken);
+        setNodes(nodeData);
+      } catch (err) {
+        console.error('새로고침 실패:', err);
+      } finally {
+        setLoading(false);
+      }
+    }
   };
+
+  // 로딩 상태
+  if (loading) {
+    return (
+      <div className={`w-full h-full flex items-center justify-center bg-gray-800 rounded-lg ${className}`}>
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-2"></div>
+          <p className="text-gray-400">노드 데이터 로딩 중...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // 에러 상태
+  if (error) {
+    return (
+      <div className={`w-full h-full flex items-center justify-center bg-gray-800 rounded-lg ${className}`}>
+        <div className="text-center">
+          <p className="text-red-400 mb-2">⚠️ {error}</p>
+          <button 
+            onClick={handleRefresh}
+            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+          >
+            다시 시도
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={`w-full relative ${className}`}>
-      {/* 현재 줌 레벨과 선택된 노드 정보 */}
+      {/* 상태 정보 */}
       <div className="absolute top-2 left-2 z-10 bg-gray-800 px-3 py-2 rounded-md space-y-1">
-        <div className="text-xs text-gray-300">Zoom: {zoom.toFixed(0)}x</div>
+        <div className="text-xs text-gray-300">
+          노드: {nodes.length}개 | Zoom: {zoom.toFixed(0)}x
+        </div>
+        <div className="text-xs text-gray-400 flex flex-wrap gap-2">
+          <span className="flex items-center">
+            <span className="w-2 h-2 bg-green-500 rounded-full mr-1"></span>
+            활성: {nodes.filter(n => ['active', 'online', 'running'].includes(n.status.toLowerCase())).length}
+          </span>
+          <span className="flex items-center">
+            <span className="w-2 h-2 bg-blue-500 rounded-full mr-1"></span>
+            준비: {nodes.filter(n => ['pre', 'preparing', 'starting'].includes(n.status.toLowerCase())).length}
+          </span>
+          <span className="flex items-center">
+            <span className="w-2 h-2 bg-yellow-500 rounded-full mr-1"></span>
+            경고: {nodes.filter(n => ['warning', 'caution', 'degraded'].includes(n.status.toLowerCase())).length}
+          </span>
+          <span className="flex items-center">
+            <span className="w-2 h-2 bg-red-500 rounded-full mr-1"></span>
+            오류: {nodes.filter(n => ['error', 'failed', 'offline', 'down'].includes(n.status.toLowerCase())).length}
+          </span>
+        </div>
         {selectedNode && (
           <div className="text-xs text-blue-400">
-            선택: {nodePositions.find(n => n.id === selectedNode)?.name}
+            선택: {nodes.find(n => n.id === selectedNode)?.name}
           </div>
         )}
       </div>
@@ -157,13 +231,20 @@ export function WorldMap({ className = '' }: WorldMapProps) {
         >
           Reset
         </button>
+        <button
+          onClick={handleRefresh}
+          className="bg-blue-700 hover:bg-blue-600 text-white p-1 rounded-md text-xs transition-colors shadow-lg"
+          disabled={loading}
+        >
+          새로고침
+        </button>
       </div>
 
       <ComposableMap
         projection="geoMercator"
         projectionConfig={{
           scale: 120,
-          center: [127.0, 37.5],  // 한국 중심 (서울)
+          center: [127.0, 37.5],
         }}
         style={{
           width: '100%',
@@ -185,40 +266,28 @@ export function WorldMap({ className = '' }: WorldMapProps) {
                   stroke="#4A5568"
                   strokeWidth={0.5 / zoom}
                   style={{
-                    default: {
-                      fill: '#2D3748',
-                      outline: 'none',
-                    },
-                    hover: {
-                      fill: '#374151',
-                      outline: 'none',
-                    },
-                    pressed: {
-                      fill: '#4A5568',
-                      outline: 'none',
-                    },
+                    default: { fill: '#2D3748', outline: 'none' },
+                    hover: { fill: '#374151', outline: 'none' },
+                    pressed: { fill: '#4A5568', outline: 'none' },
                   }}
                 />
               ))
             }
           </Geographies>
           
-          {/* 노드 마커들 - z-index 순서 조정 */}
-          {nodePositions
+          {/* 노드 마커들 */}
+          {adjustedNodes
             .sort((a, b) => {
-              // 선택된 노드를 맨 위로
               if (a.id === selectedNode) return 1;
               if (b.id === selectedNode) return -1;
-              // 호버된 노드를 그 다음으로
               if (a.id === hoveredNode) return 1;
               if (b.id === hoveredNode) return -1;
-              // 노드 수가 적은 것을 위로 (작은 노드가 위로)
               return a.nodeCount - b.nodeCount;
             })
             .map((node) => {
               const markerColor = getMarkerColor(node.status);
-              const overlappingNodes = findOverlappingNodes(node);
-              const markerSize = getMarkerSize(node.nodeCount, overlappingNodes.length > 0);
+              const markerAnimation = getMarkerAnimation(node.status);
+              const markerSize = getMarkerSize(node.nodeCount);
               const isHovered = hoveredNode === node.id;
               const isSelected = selectedNode === node.id;
               
@@ -233,46 +302,40 @@ export function WorldMap({ className = '' }: WorldMapProps) {
                     onMouseLeave={() => setHoveredNode(null)}
                     onClick={(e) => handleNodeClick(node.id, e)}
                   >
-                    {/* 클릭 가능한 투명 영역 */}
+                    {/* 클릭 영역 */}
                     <circle
-                      r={markerSize.click}
+                      r={markerSize.click * 1.2}
                       fill="transparent"
                       style={{ cursor: 'pointer' }}
                     />
                     
-                    {/* 선택된 노드 하이라이트 */}
+                    {/* 선택 하이라이트 */}
                     {isSelected && (
                       <circle
-                        r={markerSize.outer + 4}
+                        r={markerSize.outer + 2}
                         fill="none"
                         stroke="#60A5FA"
-                        strokeWidth={2 / zoom}
-                        strokeDasharray="4,2"
-                        className="animate-pulse"
+                        strokeWidth={1.5 / zoom}
+                        strokeDasharray="3,2"
                       />
                     )}
                     
-                    {/* 외부 원 */}
+                    {/* 단순한 원형 마커 */}
                     <circle
+                      cx={0}
+                      cy={0}
                       r={markerSize.outer}
                       fill={markerColor}
-                      fillOpacity={isHovered || isSelected ? 0.5 : 0.3}
-                      className={node.status === 'active' ? 'animate-pulse' : ''}
-                    />
-                    
-                    {/* 내부 원 */}
-                    <circle
-                      r={markerSize.inner}
-                      fill={markerColor}
                       stroke="#FFFFFF"
-                      strokeWidth={(isHovered || isSelected ? 2 : 1) / zoom}
+                      strokeWidth={0.5 / zoom}
+                      opacity={0.9}
                     />
                     
-                    {/* 노드 라벨 - 줌 레벨에 따라 표시 */}
+                    {/* 노드 라벨 */}
                     {(zoom > 40 || isHovered || isSelected) && (
                       <text
                         y={markerSize.outer + 8 / zoom}
-                        fontSize={10 / zoom}
+                        fontSize={9 / zoom}
                         fill="#FFFFFF"
                         textAnchor="middle"
                         stroke="#000000"
@@ -280,7 +343,7 @@ export function WorldMap({ className = '' }: WorldMapProps) {
                         paintOrder="stroke"
                         style={{ pointerEvents: 'none' }}
                       >
-                        {node.district || node.name}
+                        {node.name}
                       </text>
                     )}
                     
@@ -289,9 +352,9 @@ export function WorldMap({ className = '' }: WorldMapProps) {
                       <g style={{ pointerEvents: 'none' }}>
                         <rect
                           x={markerSize.outer + 5 / zoom}
-                          y={-30 / zoom}
-                          width={160 / zoom}
-                          height={65 / zoom}
+                          y={-40 / zoom}
+                          width={180 / zoom}
+                          height={node.usage ? 95 / zoom : 75 / zoom}
                           rx={4 / zoom}
                           fill="#1A202C"
                           stroke="#4A5568"
@@ -300,7 +363,7 @@ export function WorldMap({ className = '' }: WorldMapProps) {
                         />
                         <text
                           x={markerSize.outer + 10 / zoom}
-                          y={-15 / zoom}
+                          y={-25 / zoom}
                           fontSize={12 / zoom}
                           fill="#F7FAFC"
                           fontWeight="bold"
@@ -309,28 +372,59 @@ export function WorldMap({ className = '' }: WorldMapProps) {
                         </text>
                         <text
                           x={markerSize.outer + 10 / zoom}
-                          y={-2 / zoom}
+                          y={-12 / zoom}
                           fontSize={10 / zoom}
                           fill="#A0AEC0"
                         >
-                          {node.region} {node.district}
+                          {node.region}
+                        </text>
+                        <text
+                          x={markerSize.outer + 10 / zoom}
+                          y={0}
+                          fontSize={10 / zoom}
+                          fill={markerColor}
+                          fontWeight="bold"
+                        >
+                          상태: {node.status.toUpperCase()}
                         </text>
                         <text
                           x={markerSize.outer + 10 / zoom}
                           y={10 / zoom}
-                          fontSize={10 / zoom}
+                          fontSize={9 / zoom}
                           fill="#A0AEC0"
                         >
-                          노드: {node.nodeCount}개 • {node.status}
+                          IP: {node.ip}
                         </text>
                         <text
                           x={markerSize.outer + 10 / zoom}
-                          y={22 / zoom}
+                          y={20 / zoom}
                           fontSize={9 / zoom}
                           fill="#718096"
                         >
                           좌표: {node.coordinates[0].toFixed(4)}, {node.coordinates[1].toFixed(4)}
                         </text>
+                        
+                        {/* 사용량 정보 */}
+                        {node.usage && (
+                          <>
+                            <text
+                              x={markerSize.outer + 10 / zoom}
+                              y={32 / zoom}
+                              fontSize={9 / zoom}
+                              fill="#68D391"
+                            >
+                              CPU: {node.usage.cpu}% | 메모리: {node.usage.memory}%
+                            </text>
+                            <text
+                              x={markerSize.outer + 10 / zoom}
+                              y={44 / zoom}
+                              fontSize={9 / zoom}
+                              fill="#68D391"
+                            >
+                              GPU: {node.usage.gpu}% | 온도: {node.usage.temperature}°C
+                            </text>
+                          </>
+                        )}
                       </g>
                     )}
                   </g>
@@ -344,4 +438,4 @@ export function WorldMap({ className = '' }: WorldMapProps) {
 }
 
 // 노드 데이터를 외부에서 사용할 수 있도록 export
-export { sampleNodes };
+export type { MapNode };

@@ -16,8 +16,18 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
-  // 이미 로그인된 상태라면 대시보드로 리다이렉트
+  // 가짜 토큰 자동 삭제 및 로그인 상태 확인
   useEffect(() => {
+    // 가짜 토큰이 있다면 삭제
+    const currentToken = localStorage.getItem('authToken');
+    if (currentToken === 'test-token-for-development') {
+      console.log('🧹 가짜 토큰 삭제 중...');
+      localStorage.removeItem('authToken');
+      setErrorMessage('테스트 토큰이 삭제되었습니다. 정상 로그인을 진행해주세요.');
+      return;
+    }
+    
+    // 이미 유효한 토큰이 있다면 대시보드로 리다이렉트
     if (authService.isAuthenticated()) {
       router.push('/dashboard');
     }
@@ -132,25 +142,6 @@ export default function LoginPage() {
                 )}
               </button>
             </form>
-          </CardContent>
-        </Card>
-
-        {/* 임시 테스트용 버튼 - 나중에 삭제 예정 */}
-        <Card className="mt-4 border-yellow-500/30 bg-yellow-900/10">
-          <CardContent className="p-4">
-            <div className="text-center">
-              <p className="text-yellow-400 text-sm mb-3">⚠️ 테스트 전용 (나중에 삭제 예정)</p>
-              <button
-                onClick={() => {
-                  // 테스트용 임시 토큰 설정
-                  localStorage.setItem('authToken', 'test-token-for-development');
-                  router.push('/dashboard');
-                }}
-                className="w-full bg-yellow-600 hover:bg-yellow-700 text-white font-medium py-2 px-4 rounded-md transition-colors duration-200"
-              >
-                로그인 없이 대시보드로 이동
-              </button>
-            </div>
           </CardContent>
         </Card>
 

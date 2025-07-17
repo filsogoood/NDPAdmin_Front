@@ -17,19 +17,39 @@ export class AuthService {
     return response;
   }
 
+  async getUserData(): Promise<any> {
+    const token = this.getToken();
+    if (!token) {
+      throw new Error('로그인이 필요합니다.');
+    }
+    
+    return apiClient.getUserData(token);
+  }
+
   logout(): void {
     localStorage.removeItem('authToken');
   }
 
   getToken(): string | null {
     if (typeof window !== 'undefined') {
-      return localStorage.getItem('authToken');
+      const token = localStorage.getItem('authToken');
+      
+      // 가짜 토큰 감지 및 자동 삭제
+      if (token === 'test-token-for-development') {
+        console.log('🚫 가짜 토큰 감지됨. 자동 삭제 중...');
+        localStorage.removeItem('authToken');
+        return null;
+      }
+      
+      return token;
     }
     return null;
   }
 
   isAuthenticated(): boolean {
-    return this.getToken() !== null;
+    const token = this.getToken();
+    // getToken()에서 이미 가짜 토큰을 처리하므로, null이 아닌 경우만 인증된 것으로 판단
+    return token !== null && token.length > 0;
   }
 }
 

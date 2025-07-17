@@ -4,25 +4,142 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Navigation } from '@/components/Navigation';
 import { Card, CardContent } from '@/components/Card';
-import { WorldMap, sampleNodes } from '@/components/WorldMap';
+import { WorldMap } from '@/components/WorldMap';
 import { authService } from '@/lib/auth';
+import { apiClient } from '@/lib/api';
 import { 
   Globe,
   ChevronDown,
   ChevronUp,
-  MapPin
+  MapPin,
+  Cpu,
+  HardDrive,
+  Thermometer,
+  Activity
 } from 'lucide-react';
+
+interface NodeSummary {
+  id: string;
+  name: string;
+  status: string;
+  region: string;
+  address: string;
+  ip: string;
+  usage?: {
+    cpu: string;
+    memory: string;
+    gpu: string;
+    temperature: string;
+  };
+}
 
 export default function DashboardPage() {
   const router = useRouter();
   const [isNodeListCollapsed, setIsNodeListCollapsed] = useState(false);
+  const [authToken, setAuthToken] = useState<string | null>(null);
+  const [nodesSummary, setNodesSummary] = useState<NodeSummary[]>([]);
+  const [networkStats, setNetworkStats] = useState({
+    totalNodes: 0,
+    activeNodes: 0,
+    preNodes: 0,
+    errorNodes: 0
+  });
+  const [loading, setLoading] = useState(true);
   
-  // 페이지 로드 시 인증 체크
+  // 페이지 로드 시 인증 체크 및 토큰 설정
   useEffect(() => {
     if (!authService.isAuthenticated()) {
       router.push('/');
+      return;
     }
+    
+    const token = localStorage.getItem('authToken');
+    setAuthToken(token);
   }, [router]);
+
+  // API에서 노드 요약 정보 가져오기
+  useEffect(() => {
+    const fetchNodeSummary = async () => {
+      if (!authToken) return;
+      
+      try {
+        setLoading(true);
+        const data = await apiClient.getUserData(authToken);
+        
+        // 노드 요약 정보 생성
+        const summaryData: NodeSummary[] = data.nanodc.map((location: any) => {
+          // nanodc_id로 해당하는 노드 찾기
+          const nodeInfo = data.nodes.find((node: any) => 
+            node.nanodc_id === location.nanodc_id
+          );
+          
+          // node_id로 사용량 정보 찾기
+          const usageInfo = nodeInfo ? data.node_usage.find((usage: any) => 
+            usage.node_id === nodeInfo.node_id
+          ) : undefined;
+          
+          return {
+            id: nodeInfo?.node_id || location.nanodc_id,
+            name: nodeInfo?.node_name || location.name,
+            status: nodeInfo?.status || 'unknown',
+            region: location.address,
+            address: location.address,
+            ip: location.ip,
+            usage: usageInfo ? {
+              cpu: usageInfo.cpu_usage_percent,
+              memory: usageInfo.mem_usage_percent,
+              gpu: usageInfo.gpu_usage_percent,
+              temperature: usageInfo.gpu_temp
+            } : undefined
+          };
+        }).filter((summary: NodeSummary) => summary.id); // 유효한 노드만 필터링
+        
+        setNodesSummary(summaryData);
+        
+        // 네트워크 통계 계산
+        const stats = {
+          totalNodes: summaryData.length,
+          activeNodes: summaryData.filter(n => n.status === 'active').length,
+          preNodes: summaryData.filter(n => n.status === 'pre').length,
+          errorNodes: summaryData.filter(n => n.status === 'error').length
+        };
+        setNetworkStats(stats);
+        
+      } catch (error) {
+        console.error('노드 요약 정보 가져오기 실패:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchNodeSummary();
+  }, [authToken]);
+
+  const getStatusColor = (status: string) => {
+    switch (status.toLowerCase()) {
+      case 'active':
+        return 'bg-green-500';
+      case 'warning':
+        return 'bg-yellow-500';
+      case 'error':
+        return 'bg-red-500';
+      default:
+        return 'bg-gray-500';
+    }
+  };
+
+  const getStatusText = (status: string) => {
+    switch (status.toLowerCase()) {
+      case 'active':
+        return '활성';
+      case 'pre':
+        return '대기';
+      case 'error':
+        return '오류';
+      default:
+        return '알 수 없음';
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gray-900">
@@ -37,6 +154,60 @@ export default function DashboardPage() {
           </p>
         </div>
 
+        {/* 네트워크 요약 통계 */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+          <Card className="fade-in">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-400">전체 노드</p>
+                  <p className="text-2xl font-bold text-gray-100">{networkStats.totalNodes}</p>
+                </div>
+                <Globe className="h-8 w-8 text-blue-400" />
+              </div>
+            </CardContent>
+          </Card>
+          
+          <Card className="fade-in" style={{ animationDelay: '0.1s' }}>
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-400">활성 노드</p>
+                  <p className="text-2xl font-bold text-green-400">{networkStats.activeNodes}</p>
+                </div>
+                <Activity className="h-8 w-8 text-green-400" />
+              </div>
+            </CardContent>
+          </Card>
+          
+          <Card className="fade-in" style={{ animationDelay: '0.2s' }}>
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-400">대기 노드</p>
+                  <p className="text-2xl font-bold text-yellow-400">{networkStats.preNodes}</p>
+                </div>
+                <Cpu className="h-8 w-8 text-yellow-400" />
+              </div>
+            </CardContent>
+          </Card>
+          
+          <Card className="fade-in" style={{ animationDelay: '0.3s' }}>
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-400">가동률</p>
+                  <p className="text-2xl font-bold text-blue-400">
+                    {networkStats.totalNodes > 0 ? 
+                      Math.round((networkStats.activeNodes / networkStats.totalNodes) * 100) : 0}%
+                  </p>
+                </div>
+                <HardDrive className="h-8 w-8 text-blue-400" />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
         {/* 네트워크 글로벌 현황 */}
         <div className="mb-8">
           <Card className="fade-in" style={{ animationDelay: '0.7s' }}>
@@ -45,7 +216,7 @@ export default function DashboardPage() {
                 <div>
                   <h2 className="text-xl font-bold text-gray-100 mb-2">글로벌 네트워크 현황</h2>
                   <p className="text-gray-400">
-                    전 세계 노드 분포와 실시간 상태를 확인하세요
+                    실시간 노드 분포와 상태를 확인하세요
                   </p>
                 </div>
                 <div className="p-3 rounded-full bg-gray-700 text-blue-400">
@@ -57,19 +228,25 @@ export default function DashboardPage() {
                 {/* 지도 영역 */}
                 <div className="lg:col-span-2">
                   <div className="h-96 bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
-                    <WorldMap className="h-full" />
+                    {authToken ? (
+                      <WorldMap className="h-full" authToken={authToken} />
+                    ) : (
+                      <div className="h-full flex items-center justify-center text-gray-400">
+                        인증이 필요합니다
+                      </div>
+                    )}
                   </div>
                 </div>
 
                 {/* 노드 목록 카드 */}
                 <div className="lg:col-span-1">
                   <div className="bg-gray-800 border border-gray-700 rounded-lg h-96 flex flex-col overflow-hidden">
-                    {/* 헤더 영역 - 고정 */}
+                    {/* 헤더 영역 */}
                     <div className="flex items-center justify-between p-4 border-b border-gray-700">
                       <div>
                         <h3 className="text-lg font-bold text-gray-100 mb-1">노드 목록</h3>
                         <p className="text-sm text-gray-400">
-                          {sampleNodes.length}개 지역의 노드 분포
+                          {nodesSummary.length}개 노드 현황
                         </p>
                       </div>
                       <button
@@ -85,47 +262,68 @@ export default function DashboardPage() {
                       </button>
                     </div>
 
-                    {/* 컨텐츠 영역 - 스크롤 가능 */}
+                    {/* 컨텐츠 영역 */}
                     <div className="flex-1 p-4 overflow-hidden">
-                      {isNodeListCollapsed && (
-                        <div className="text-sm text-gray-400">
-                          활성: {sampleNodes.filter(n => n.status === 'active').length}개 | 
-                          경고: {sampleNodes.filter(n => n.status === 'warning').length}개 | 
-                          비활성: {sampleNodes.filter(n => n.status === 'error').length}개
+                      {loading ? (
+                        <div className="text-center text-gray-400">
+                          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500 mx-auto mb-2"></div>
+                          로딩 중...
                         </div>
-                      )}
-
-                      {!isNodeListCollapsed && (
+                      ) : isNodeListCollapsed ? (
+                        <div className="text-sm text-gray-400">
+                          활성: {networkStats.activeNodes}개 | 
+                          대기: {networkStats.preNodes}개 | 
+                          오류: {networkStats.errorNodes}개
+                        </div>
+                      ) : (
                         <div className="h-full overflow-y-auto pr-2 custom-scrollbar">
                           <div className="space-y-2">
-                            {sampleNodes.map((node) => (
+                            {nodesSummary.map((node) => (
                               <div
                                 key={node.id}
                                 className="p-3 bg-gray-700 border border-gray-600 rounded-lg hover:bg-gray-600 transition-all duration-200 cursor-pointer"
                               >
                                 <div className="flex justify-between items-start">
                                   <div className="flex-1 min-w-0">
-                                    <h4 className="font-medium text-gray-100 text-sm truncate">{node.name}</h4>
+                                    <h4 className="font-medium text-gray-100 text-sm truncate">
+                                      {node.name}
+                                    </h4>
                                     <div className="flex items-center space-x-1 text-xs text-gray-400 mt-1">
                                       <MapPin className="h-3 w-3 flex-shrink-0" />
                                       <span className="truncate">{node.region}</span>
                                     </div>
-                                    <div className="text-xs text-gray-500 mt-1 truncate">
-                                      {node.district}
+                                    <div className="text-xs text-gray-500 mt-1">
+                                      IP: {node.ip}
                                     </div>
+                                    
+                                    {/* 사용량 정보 */}
+                                    {node.usage && (
+                                      <div className="mt-2 space-y-1">
+                                        <div className="flex items-center text-xs space-x-2">
+                                          <Cpu className="h-3 w-3 text-blue-400" />
+                                          <span className="text-gray-400">CPU: {node.usage.cpu}%</span>
+                                        </div>
+                                        <div className="flex items-center text-xs space-x-2">
+                                          <HardDrive className="h-3 w-3 text-green-400" />
+                                          <span className="text-gray-400">GPU: {node.usage.gpu}%</span>
+                                        </div>
+                                        <div className="flex items-center text-xs space-x-2">
+                                          <Thermometer className="h-3 w-3 text-orange-400" />
+                                          <span className="text-gray-400">온도: {node.usage.temperature}°C</span>
+                                        </div>
+                                      </div>
+                                    )}
                                   </div>
+                                  
                                   <div className="flex items-center ml-3 space-x-2">
-                                    <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                                      node.status === 'active' ? 'bg-green-500' :
-                                      node.status === 'warning' ? 'bg-yellow-500' :
-                                      'bg-gray-500'
-                                    }`}></div>
+                                    <div className={`w-2 h-2 rounded-full flex-shrink-0 ${getStatusColor(node.status)}`}></div>
                                     <span className={`px-2 py-1 rounded-full text-xs font-medium whitespace-nowrap ${
                                       node.status === 'active' ? 'bg-green-900/50 text-green-300' :
                                       node.status === 'warning' ? 'bg-yellow-900/50 text-yellow-300' :
+                                      node.status === 'pre' ? 'bg-blue-900/50 text-blue-300' :
                                       'bg-gray-600/50 text-gray-300'
                                     }`}>
-                                      {node.nodeCount}개
+                                      {getStatusText(node.status)}
                                     </span>
                                   </div>
                                 </div>
@@ -146,12 +344,16 @@ export default function DashboardPage() {
                   <span className="text-sm text-gray-400">활성 노드</span>
                 </div>
                 <div className="flex items-center space-x-2">
+                  <div className="w-3 h-3 rounded-full bg-blue-500"></div>
+                  <span className="text-sm text-gray-400">대기 상태</span>
+                </div>
+                <div className="flex items-center space-x-2">
                   <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
                   <span className="text-sm text-gray-400">경고 상태</span>
                 </div>
                 <div className="flex items-center space-x-2">
-                  <div className="w-3 h-3 rounded-full bg-gray-500"></div>
-                  <span className="text-sm text-gray-400">비활성 노드</span>
+                  <div className="w-3 h-3 rounded-full bg-red-500"></div>
+                  <span className="text-sm text-gray-400">오류 상태</span>
                 </div>
               </div>
             </CardContent>
