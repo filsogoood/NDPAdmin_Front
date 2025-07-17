@@ -115,11 +115,11 @@ export function WorldMap({ className = '', authToken }: WorldMapProps) {
   const getMarkerSize = (nodeCount: number) => {
     const zoomFactor = Math.max(0.3, 1 - (zoom - 30) / 150);
     
-    // 모든 노드를 동일한 작은 크기로 통일
+    // 모든 노드를 동일한 작은 크기로 통일 (기존 크기의 1/4로 조정)
     return { 
-      outer: 1.5 * zoomFactor, // 더 작은 원 크기
-      inner: 0.6 * zoomFactor,
-      click: 2.5 * zoomFactor // 클릭 영역도 줄임
+      outer: 1.5 * zoomFactor / 4, // 기존 크기의 1/4
+      inner: 0.6 * zoomFactor / 4,
+      click: 2.5 * zoomFactor / 4 // 클릭 영역도 1/4로 줄임
     };
   };
 
@@ -312,7 +312,7 @@ export function WorldMap({ className = '', authToken }: WorldMapProps) {
                     {/* 선택 하이라이트 */}
                     {isSelected && (
                       <circle
-                        r={markerSize.outer + 2}
+                        r={markerSize.outer + 0.5}
                         fill="none"
                         stroke="#60A5FA"
                         strokeWidth={1.5 / zoom}
@@ -334,7 +334,7 @@ export function WorldMap({ className = '', authToken }: WorldMapProps) {
                     {/* 노드 라벨 */}
                     {(zoom > 40 || isHovered || isSelected) && (
                       <text
-                        y={markerSize.outer + 8 / zoom}
+                        y={markerSize.outer + 6 / zoom}
                         fontSize={9 / zoom}
                         fill="#FFFFFF"
                         textAnchor="middle"
@@ -351,77 +351,86 @@ export function WorldMap({ className = '', authToken }: WorldMapProps) {
                     {(isHovered || isSelected) && (
                       <g style={{ pointerEvents: 'none' }}>
                         <rect
-                          x={markerSize.outer + 5 / zoom}
-                          y={-40 / zoom}
-                          width={180 / zoom}
-                          height={node.usage ? 95 / zoom : 75 / zoom}
-                          rx={4 / zoom}
+                          x={markerSize.outer + 3 / zoom}
+                          y={-110 / zoom}
+                          width={480 / zoom}
+                          height={node.usage ? 250 / zoom : 200 / zoom}
+                          rx={12 / zoom}
                           fill="#1A202C"
                           stroke="#4A5568"
                           strokeWidth={1 / zoom}
                           opacity={0.95}
                         />
+                        {/* 노드 이름 (타이틀) */}
                         <text
-                          x={markerSize.outer + 10 / zoom}
-                          y={-25 / zoom}
-                          fontSize={12 / zoom}
+                          x={markerSize.outer + 16 / zoom}
+                          y={-65 / zoom}
+                          fontSize={28 / zoom}
                           fill="#F7FAFC"
                           fontWeight="bold"
                         >
                           {node.name}
                         </text>
+                        
+                        {/* 지역 정보 */}
                         <text
-                          x={markerSize.outer + 10 / zoom}
-                          y={-12 / zoom}
-                          fontSize={10 / zoom}
+                          x={markerSize.outer + 16 / zoom}
+                          y={-35 / zoom}
+                          fontSize={20 / zoom}
                           fill="#A0AEC0"
                         >
-                          {node.region}
+                          📍 {node.region}
                         </text>
+                        
+                        {/* 상태 정보 */}
                         <text
-                          x={markerSize.outer + 10 / zoom}
-                          y={0}
-                          fontSize={10 / zoom}
+                          x={markerSize.outer + 16 / zoom}
+                          y={-5 / zoom}
+                          fontSize={22 / zoom}
                           fill={markerColor}
                           fontWeight="bold"
                         >
-                          상태: {node.status.toUpperCase()}
+                          🔄 상태: {node.status.toUpperCase()}
                         </text>
+                        
+                        {/* IP 주소 */}
                         <text
-                          x={markerSize.outer + 10 / zoom}
-                          y={10 / zoom}
-                          fontSize={9 / zoom}
+                          x={markerSize.outer + 16 / zoom}
+                          y={25 / zoom}
+                          fontSize={18 / zoom}
                           fill="#A0AEC0"
                         >
-                          IP: {node.ip}
+                          🌐 IP: {node.ip}
                         </text>
+                        
+                        {/* 좌표 정보 */}
                         <text
-                          x={markerSize.outer + 10 / zoom}
-                          y={20 / zoom}
-                          fontSize={9 / zoom}
+                          x={markerSize.outer + 16 / zoom}
+                          y={55 / zoom}
+                          fontSize={16 / zoom}
                           fill="#718096"
                         >
-                          좌표: {node.coordinates[0].toFixed(4)}, {node.coordinates[1].toFixed(4)}
+                          📊 좌표: {node.coordinates[0].toFixed(4)}, {node.coordinates[1].toFixed(4)}
                         </text>
                         
                         {/* 사용량 정보 */}
                         {node.usage && (
                           <>
                             <text
-                              x={markerSize.outer + 10 / zoom}
-                              y={32 / zoom}
-                              fontSize={9 / zoom}
+                              x={markerSize.outer + 16 / zoom}
+                              y={90 / zoom}
+                              fontSize={18 / zoom}
                               fill="#68D391"
                             >
-                              CPU: {node.usage.cpu}% | 메모리: {node.usage.memory}%
+                              💻 CPU: {node.usage.cpu}% | 📝 메모리: {node.usage.memory}%
                             </text>
                             <text
-                              x={markerSize.outer + 10 / zoom}
-                              y={44 / zoom}
-                              fontSize={9 / zoom}
+                              x={markerSize.outer + 16 / zoom}
+                              y={120 / zoom}
+                              fontSize={18 / zoom}
                               fill="#68D391"
                             >
-                              GPU: {node.usage.gpu}% | 온도: {node.usage.temperature}°C
+                              🎮 GPU: {node.usage.gpu}% | 🌡️ 온도: {node.usage.temperature}°C
                             </text>
                           </>
                         )}
