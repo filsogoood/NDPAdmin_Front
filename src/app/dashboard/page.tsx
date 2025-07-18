@@ -37,6 +37,16 @@ interface NodeSummary {
     memory: string;
     gpu: string;
     temperature: string;
+    storage: string; // 🐛 스토리지 사용량 추가
+  };
+  // 🐛 하드웨어 정보 인터페이스 추가
+  hardware?: {
+    cpu_model: string;
+    cpu_cores: string;
+    gpu_model: string;
+    gpu_count: string;
+    total_ram_gb: string;
+    storage_total_gb: string;
   };
 }
 
@@ -69,6 +79,10 @@ export default function DashboardPage() {
 
   // 콜백 함수들을 useCallback으로 안정화
   const handleSuccess = useCallback((data: any) => {
+    // 🐛 Dashboard 하드웨어 매핑 디버깅 로그 추가
+    console.log('🔍 [Dashboard Debug] 받은 전체 데이터:', data);
+    console.log('🔍 [Dashboard Debug] hardware_specs:', data.hardware_specs);
+    
     // 노드 요약 정보 생성
     const summaryData: NodeSummary[] = data.nanodc.map((location: any) => {
       // nanodc_id로 해당하는 노드 찾기
@@ -81,7 +95,22 @@ export default function DashboardPage() {
         usage.node_id === nodeInfo.node_id
       ) : undefined;
       
-      return {
+      // 🐛 node_id로 하드웨어 정보 찾기 (추가됨)
+      const hardwareInfo = nodeInfo ? data.hardware_specs.find((hw: any) => 
+        hw.node_id === nodeInfo.node_id
+      ) : undefined;
+      
+      // 🐛 하드웨어 매핑 디버깅 로그
+      console.log(`🔍 [Dashboard Debug] 노드 "${nodeInfo?.node_name}" 처리:`);
+      console.log(`🔍 [Dashboard Debug] node_id: ${nodeInfo?.node_id}`);
+      console.log(`🔍 [Dashboard Debug] hardwareInfo:`, hardwareInfo);
+      if (hardwareInfo) {
+        console.log(`🔍 [Dashboard Debug] storage_total_gb: ${hardwareInfo.storage_total_gb}`);
+      } else {
+        console.log(`🔍 [Dashboard Debug] ❌ 하드웨어 정보 없음`);
+      }
+      
+      const result = {
         id: nodeInfo?.node_id || location.nanodc_id,
         name: nodeInfo?.node_name || location.name,
         status: nodeInfo?.status || 'unknown',
@@ -92,9 +121,22 @@ export default function DashboardPage() {
           cpu: usageInfo.cpu_usage_percent,
           memory: usageInfo.mem_usage_percent,
           gpu: usageInfo.gpu_usage_percent,
-          temperature: usageInfo.gpu_temp
+          temperature: usageInfo.gpu_temp,
+          storage: usageInfo.used_storage_gb // 🐛 실제 스토리지 사용량 추가
+        } : undefined,
+        // 🐛 하드웨어 정보 추가
+        hardware: hardwareInfo ? {
+          cpu_model: hardwareInfo.cpu_model,
+          cpu_cores: hardwareInfo.cpucores,
+          gpu_model: hardwareInfo.gpu_model,
+          gpu_count: hardwareInfo.gpu_count,
+          total_ram_gb: hardwareInfo.total_ram_gb,
+          storage_total_gb: hardwareInfo.storage_total_gb
         } : undefined
       };
+      
+      console.log(`🔍 [Dashboard Debug] 최종 결과:`, result);
+      return result;
     }).filter((summary: NodeSummary) => summary.id); // 유효한 노드만 필터링
     
     setNodesSummary(summaryData);
@@ -216,23 +258,23 @@ export default function DashboardPage() {
               
               {/* 자동 갱신 상태 표시 */}
               <div className="flex items-center space-x-2">
-                <div className={`w-2 h-2 rounded-full ${
+                {/* <div className={`w-2 h-2 rounded-full ${
                   isAutoRefreshEnabled ? 'bg-green-500 animate-pulse' : 'bg-gray-500'
-                }`}></div>
-                <span className="text-sm text-gray-400">
+                }`}></div> */}
+                {/* <span className="text-sm text-gray-400">
                   자동 갱신 {isAutoRefreshEnabled ? '활성' : '비활성'}
-                </span>
+                </span> */}
               </div>
               
               {/* 제어 버튼 */}
               <div className="flex items-center space-x-2">
-                <button
+                {/* <button
                   onClick={testTokenValidity}
                   className="px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm rounded-md transition-colors"
                   title="토큰 유효성 테스트"
                 >
                   토큰 테스트
-                </button>
+                </button> */}
                 
                 <button
                   onClick={toggleAutoRefresh}
@@ -343,7 +385,7 @@ export default function DashboardPage() {
                 <div>
                   <h2 className="text-xl font-bold text-gray-100 mb-2">글로벌 네트워크 현황</h2>
                   <p className="text-gray-400">
-                    실시간 노드 분포와 상태를 확인하세요
+                    실시간 NANO DC 상태를 확인하세요
                   </p>
                 </div>
                 <div className="p-3 rounded-full bg-gray-700 text-blue-400">
@@ -371,7 +413,7 @@ export default function DashboardPage() {
                     {/* 헤더 영역 */}
                     <div className="flex items-center justify-between p-4 border-b border-gray-700">
                       <div>
-                        <h3 className="text-lg font-bold text-gray-100 mb-1">노드 목록</h3>
+                        <h3 className="text-lg font-bold text-gray-100 mb-1">NANO DC 목록</h3>
                         <p className="text-sm text-gray-400">
                           {nodesSummary.length}개 노드 현황
                         </p>
@@ -438,6 +480,10 @@ export default function DashboardPage() {
                                         <div className="flex items-center text-xs space-x-2">
                                           <Thermometer className="h-3 w-3 text-orange-400" />
                                           <span className="text-gray-400">온도: {node.usage.temperature}°C</span>
+                                        </div>
+                                        <div className="flex items-center text-xs space-x-2">
+                                          <HardDrive className="h-3 w-3 text-purple-400" />
+                                          <span className="text-gray-400">스토리지: {node.usage.storage} GB</span>
                                         </div>
                                       </div>
                                     )}

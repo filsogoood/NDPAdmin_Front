@@ -313,22 +313,52 @@ export function NodeDetailPanel({ node, isOpen, onClose }: NodeDetailPanelProps)
                   스토리지 사용량
                 </h3>
                 <div className="bg-gray-900/50 rounded-lg p-4 border border-gray-600/30">
-                  <div className="flex justify-between items-center text-sm mb-3">
-                    <span className="text-gray-400">사용 중</span>
-                    <span className="text-white font-bold text-lg">
-                      {node.usage.storage} GB / {node.hardware.storage_total_gb} GB
-                    </span>
-                  </div>
-                  <div className="w-full bg-gray-700 rounded-full h-3 shadow-inner">
-                    <div 
-                      className="bg-gradient-to-r from-purple-600 to-purple-400 h-3 rounded-full transition-all duration-700 ease-out shadow-lg"
-                      style={{ width: `${(node.usage.storage / parseInt(node.hardware.storage_total_gb)) * 100}%` }}
-                    />
-                  </div>
-                  <div className="flex justify-between text-xs text-gray-500 mt-2">
-                    <span>여유 공간: {parseInt(node.hardware.storage_total_gb) - node.usage.storage} GB</span>
-                    <span>사용률: {Math.round((node.usage.storage / parseInt(node.hardware.storage_total_gb)) * 100)}%</span>
-                  </div>
+                  {(() => {
+                    // 🐛 스토리지 디버깅 로그 추가
+                    console.log('🔍 [Storage Display Debug] Node:', node.name || node.id);
+                    console.log('🔍 [Storage Display Debug] node.usage.storage:', node.usage.storage);
+                    console.log('🔍 [Storage Display Debug] node.hardware.storage_total_gb:', node.hardware.storage_total_gb);
+                    console.log('🔍 [Storage Display Debug] storage_total_gb 타입:', typeof node.hardware.storage_total_gb);
+                    
+                    const totalStorage = node.hardware.storage_total_gb;
+                    if (totalStorage === 'Unknown' || totalStorage === undefined || totalStorage === null) {
+                      console.log('🔍 [Storage Display Debug] ⚠️ storage_total_gb가 Unknown/undefined/null입니다');
+                    }
+                    
+                    return null;
+                  })()}
+                  
+                  {/* Unknown 값 처리 */}
+                  {node.hardware.storage_total_gb === 'Unknown' || !node.hardware.storage_total_gb ? (
+                    <div className="text-center py-8">
+                      <div className="text-yellow-400 text-lg mb-2">⚠️</div>
+                      <div className="text-gray-400 text-sm">
+                        스토리지 정보를 불러올 수 없습니다
+                      </div>
+                      <div className="text-gray-500 text-xs mt-1">
+                        하드웨어 정보를 확인해주세요
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex justify-between items-center text-sm mb-3">
+                        <span className="text-gray-400">사용 중</span>
+                        <span className="text-white font-bold text-lg">
+                          {node.usage.storage} GB / {node.hardware.storage_total_gb} GB
+                        </span>
+                      </div>
+                      <div className="w-full bg-gray-700 rounded-full h-3 shadow-inner">
+                        <div 
+                          className="bg-gradient-to-r from-purple-600 to-purple-400 h-3 rounded-full transition-all duration-700 ease-out shadow-lg"
+                          style={{ width: `${Math.min(100, Math.max(0, (node.usage.storage / parseInt(node.hardware.storage_total_gb)) * 100))}%` }}
+                        />
+                      </div>
+                      <div className="flex justify-between text-xs text-gray-500 mt-2">
+                        <span>여유 공간: {parseInt(node.hardware.storage_total_gb) - node.usage.storage} GB</span>
+                        <span>사용률: {Math.round((node.usage.storage / parseInt(node.hardware.storage_total_gb)) * 100)}%</span>
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
             )}

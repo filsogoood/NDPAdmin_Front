@@ -225,7 +225,7 @@ export default function NodesPage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center justify-between">
-              <span>노드 목록 ({filteredAndSortedNodes.length}개)</span>
+              <span>NANO DC 목록 ({filteredAndSortedNodes.length}개)</span>
               <div className="flex items-center space-x-2">
                 <Monitor className="h-5 w-5 text-primary" />
                 <button

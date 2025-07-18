@@ -157,11 +157,11 @@ export function WorldMap({ className = '', authToken }: WorldMapProps) {
   const getMarkerSize = (nodeCount: number) => {
     const zoomFactor = Math.max(0.3, 1 - (zoom - 30) / 150);
     
-    // 모든 노드를 동일한 작은 크기로 통일 (기존 크기의 1/4로 조정)
+    // 줌 40에서 적절한 크기가 되도록 조정 (기존 크기의 2배)
     return { 
-      outer: 1.5 * zoomFactor / 4, // 기존 크기의 1/4
-      inner: 0.6 * zoomFactor / 4,
-      click: 2.5 * zoomFactor / 4 // 클릭 영역도 1/4로 줄임
+      outer: 1.5 * zoomFactor / 2, // 줌 40에서 더 큰 크기
+      inner: 0.6 * zoomFactor / 2,
+      click: 2.5 * zoomFactor / 2 // 클릭 영역도 동일하게 조정
     };
   };
 
@@ -386,6 +386,8 @@ export function WorldMap({ className = '', authToken }: WorldMapProps) {
                   >
                     {/* 클릭 영역 */}
                     <circle
+                      cx={0}
+                      cy={-markerSize.outer * 0.8}
                       r={markerSize.click * 1.2}
                       fill="transparent"
                       style={{ cursor: 'pointer' }}
@@ -394,7 +396,9 @@ export function WorldMap({ className = '', authToken }: WorldMapProps) {
                     {/* 선택 하이라이트 */}
                     {isSelected && (
                       <circle
-                        r={markerSize.outer + 0.5}
+                        cx={0}
+                        cy={-markerSize.outer * 1.2}
+                        r={markerSize.outer + 0.3}
                         fill="none"
                         stroke="#60A5FA"
                         strokeWidth={1.5 / zoom}
@@ -402,21 +406,33 @@ export function WorldMap({ className = '', authToken }: WorldMapProps) {
                       />
                     )}
                     
-                    {/* 단순한 원형 마커 */}
-                    <circle
-                      cx={0}
-                      cy={0}
-                      r={markerSize.outer}
-                      fill={markerColor}
-                      stroke="#FFFFFF"
-                      strokeWidth={0.5 / zoom}
-                      opacity={0.9}
-                    />
+                    {/* 클래식 핀 마커 */}
+                    <g>
+                      {/* 핀 마커 메인 형태 - 간단하고 표준적인 핀 */}
+                      <path
+                        d={`M 0,0 
+                            L -${markerSize.outer * 0.6},-${markerSize.outer * 1.2}
+                            A ${markerSize.outer * 0.6},${markerSize.outer * 0.6} 0 1,1 ${markerSize.outer * 0.6},-${markerSize.outer * 1.2}
+                            Z`}
+                        fill={markerColor}
+                        stroke="#FFFFFF"
+                        strokeWidth={0.8 / zoom}
+                        opacity={0.95}
+                      />
+                      {/* 핀 마커 내부 원형 - 더 적절한 위치와 크기 */}
+                      <circle
+                        cx={0}
+                        cy={-markerSize.outer * 1.2}
+                        r={markerSize.inner * 0.7}
+                        fill="#FFFFFF"
+                        opacity={0.95}
+                      />
+                    </g>
                     
                     {/* 노드 라벨 */}
                     {(zoom > 40 || isHovered || isSelected) && (
                       <text
-                        y={markerSize.outer + 6 / zoom}
+                        y={8 / zoom}
                         fontSize={9 / zoom}
                         fill="#FFFFFF"
                         textAnchor="middle"
@@ -433,8 +449,8 @@ export function WorldMap({ className = '', authToken }: WorldMapProps) {
                     {isHovered && !isSelected && (
                       <g style={{ pointerEvents: 'none' }}>
                         <rect
-                          x={markerSize.outer + 3 / zoom}
-                          y={-60 / zoom}
+                          x={markerSize.outer + 5 / zoom}
+                          y={-markerSize.outer * 2 - 20 / zoom}
                           width={200 / zoom}
                           height={60 / zoom}
                           rx={8 / zoom}
@@ -444,8 +460,8 @@ export function WorldMap({ className = '', authToken }: WorldMapProps) {
                           opacity={0.95}
                         />
                         <text
-                          x={markerSize.outer + 12 / zoom}
-                          y={-35 / zoom}
+                          x={markerSize.outer + 14 / zoom}
+                          y={-markerSize.outer * 2 + 5 / zoom}
                           fontSize={16 / zoom}
                           fill="#F7FAFC"
                           fontWeight="bold"
@@ -453,16 +469,16 @@ export function WorldMap({ className = '', authToken }: WorldMapProps) {
                           {node.name}
                         </text>
                         <text
-                          x={markerSize.outer + 12 / zoom}
-                          y={-10 / zoom}
+                          x={markerSize.outer + 14 / zoom}
+                          y={-markerSize.outer * 2 + 25 / zoom}
                           fontSize={14 / zoom}
                           fill="#A0AEC0"
                         >
                           {node.region}
                         </text>
                         <text
-                          x={markerSize.outer + 12 / zoom}
-                          y={15 / zoom}
+                          x={markerSize.outer + 14 / zoom}
+                          y={-markerSize.outer * 2 + 45 / zoom}
                           fontSize={14 / zoom}
                           fill={markerColor}
                         >

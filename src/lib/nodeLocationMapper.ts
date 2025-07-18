@@ -207,6 +207,19 @@ export async function transformApiDataToMapNodes(apiData: ApiNodeData): Promise<
     hardware_specs: apiData.hardware_specs?.length || 0
   });
 
+  // 🐛 하드웨어 스펙 디버깅 로그 추가
+  console.log('🔍 [Storage Debug] 전체 API 데이터 구조:', apiData);
+  if (apiData.hardware_specs && Array.isArray(apiData.hardware_specs)) {
+    console.log('🔍 [Storage Debug] hardware_specs 배열:', apiData.hardware_specs);
+    apiData.hardware_specs.forEach((hw, index) => {
+      console.log(`🔍 [Storage Debug] hardware_specs[${index}]:`, hw);
+      console.log(`🔍 [Storage Debug] storage_total_gb 값:`, hw.storage_total_gb);
+      console.log(`🔍 [Storage Debug] storage_type 값:`, hw.storage_type);
+    });
+  } else {
+    console.log('🔍 [Storage Debug] ❌ hardware_specs가 없거나 배열이 아님');
+  }
+
   const { nodes, nanodc, node_usage, hardware_specs } = apiData;
   
   if (!nanodc || !Array.isArray(nanodc)) {
@@ -243,10 +256,65 @@ export async function transformApiDataToMapNodes(apiData: ApiNodeData): Promise<
         usage.node_id === nodeInfo.node_id
       );
       
+      // 🐛 사용량 정보 디버깅 로그 추가
+      console.log('🔍 [Storage Usage Debug] Node ID:', nodeInfo.node_id);
+      console.log('🔍 [Storage Usage Debug] 전체 node_usage:', node_usage);
+      console.log('🔍 [Storage Usage Debug] 찾은 usageInfo:', usageInfo);
+      if (usageInfo) {
+        console.log('🔍 [Storage Usage Debug] used_storage_gb 값:', usageInfo.used_storage_gb);
+        console.log('🔍 [Storage Usage Debug] used_storage_gb 타입:', typeof usageInfo.used_storage_gb);
+        const parsedUsage = parseInt(usageInfo.used_storage_gb);
+        console.log('🔍 [Storage Usage Debug] 파싱된 storage 값:', parsedUsage);
+        if (isNaN(parsedUsage)) {
+          console.log('🔍 [Storage Usage Debug] ⚠️ used_storage_gb 파싱 실패');
+        }
+      } else {
+        console.log('🔍 [Storage Usage Debug] ❌ 해당 node_id에 대한 사용량 정보를 찾을 수 없음');
+      }
+      
       // node_id로 하드웨어 정보 찾기
       const hardwareInfo = hardware_specs?.find(hw => 
         hw.node_id === nodeInfo.node_id
       );
+      
+      // 🐛 스토리지 디버깅 로그 추가
+      console.log('🔍 [Storage Debug] Node ID:', nodeInfo.node_id);
+      console.log('🔍 [Storage Debug] Node Name:', nodeInfo.node_name);
+      console.log('🔍 [Storage Debug] Node ID 길이:', nodeInfo.node_id?.length);
+      console.log('🔍 [Storage Debug] Node ID 타입:', typeof nodeInfo.node_id);
+      
+      // 모든 hardware_specs의 node_id와 비교
+      console.log('🔍 [Storage Debug] 전체 hardware_specs node_id 목록:');
+      hardware_specs?.forEach((hw, index) => {
+        const isMatch = hw.node_id === nodeInfo.node_id;
+        console.log(`  [${index}] "${hw.node_id}" (길이: ${hw.node_id?.length}) - 매치: ${isMatch}`);
+        if (hw.node_id && nodeInfo.node_id) {
+          // 문자별 비교
+          for (let i = 0; i < Math.max(hw.node_id.length, nodeInfo.node_id.length); i++) {
+            if (hw.node_id[i] !== nodeInfo.node_id[i]) {
+              console.log(`    ❌ 차이점 발견 [${i}]: "${hw.node_id[i]}" vs "${nodeInfo.node_id[i]}"`);
+            }
+          }
+        }
+      });
+      
+      console.log('🔍 [Storage Debug] 찾은 hardwareInfo:', hardwareInfo);
+      if (hardwareInfo) {
+        console.log('🔍 [Storage Debug] storage_total_gb 값:', hardwareInfo.storage_total_gb);
+        console.log('🔍 [Storage Debug] storage_type 값:', hardwareInfo.storage_type);
+      } else {
+        console.log('🔍 [Storage Debug] ❌ 해당 node_id에 대한 하드웨어 정보를 찾을 수 없음');
+        console.log('🔍 [Storage Debug] 정확한 매칭을 위한 체크:');
+        
+        // 부분 매칭 시도
+        const partialMatch = hardware_specs?.find(hw => 
+          hw.node_id && nodeInfo.node_id && 
+          (hw.node_id.includes(nodeInfo.node_id) || nodeInfo.node_id.includes(hw.node_id))
+        );
+        if (partialMatch) {
+          console.log('🔍 [Storage Debug] 부분 매칭 발견:', partialMatch);
+        }
+      }
       
       console.log(`🔄 좌표 생성 시작 - 주소: ${location.address}, 위도: ${location.latitude}, 경도: ${location.longtitude}`);
       
@@ -276,17 +344,73 @@ export async function transformApiDataToMapNodes(apiData: ApiNodeData): Promise<
           memory: parseFloat(usageInfo.mem_usage_percent),
           gpu: parseFloat(usageInfo.gpu_usage_percent),
           temperature: parseFloat(usageInfo.gpu_temp),
-          storage: parseInt(usageInfo.used_storage_gb)
-        } : undefined,
+          storage: (() => {
+            // 🐛 스토리지 사용량 검증 로직 추가
+            const rawUsage = usageInfo.used_storage_gb;
+            console.log('🔍 [Storage Usage Debug] 원본 used_storage_gb 값:', rawUsage);
+            
+            const parsedUsage = parseInt(rawUsage);
+            if (isNaN(parsedUsage)) {
+              console.log('🔍 [Storage Usage Debug] ⚠️ used_storage_gb가 숫자가 아님, 기본값 0 사용');
+              return 0;
+            }
+            
+            if (parsedUsage < 0) {
+              console.log('🔍 [Storage Usage Debug] ⚠️ used_storage_gb가 음수, 기본값 0 사용');
+              return 0;
+            }
+            
+            console.log('🔍 [Storage Usage Debug] ✅ 유효한 storage 사용량:', parsedUsage);
+            return parsedUsage;
+          })()
+        } : (() => {
+          console.log('🔍 [Storage Usage Debug] ❌ usageInfo가 null/undefined - 사용량 정보 없음');
+          return undefined;
+        })(),
         hardware: hardwareInfo ? {
           cpu_model: hardwareInfo.cpu_model,
           cpu_cores: hardwareInfo.cpucores,
           gpu_model: hardwareInfo.gpu_model,
           gpu_count: hardwareInfo.gpu_count,
           total_ram_gb: hardwareInfo.total_ram_gb,
-          storage_total_gb: hardwareInfo.storage_total_gb
-        } : undefined
+          storage_total_gb: (() => {
+            // 🐛 스토리지 값 검증 로직 추가
+            const rawValue = hardwareInfo.storage_total_gb;
+            console.log('🔍 [Storage Debug] 원본 storage_total_gb 값:', rawValue, '타입:', typeof rawValue);
+            
+            // 빈 문자열, null, undefined 체크
+            if (!rawValue || rawValue === '' || rawValue === 'null' || rawValue === 'undefined') {
+              console.log('🔍 [Storage Debug] ⚠️ storage_total_gb가 비어있거나 null/undefined');
+              return 'Unknown';
+            }
+            
+            // 숫자로 변환 가능한지 체크
+            const numericValue = parseFloat(rawValue);
+            if (isNaN(numericValue)) {
+              console.log('🔍 [Storage Debug] ⚠️ storage_total_gb가 숫자로 변환할 수 없음:', rawValue);
+              return 'Unknown';
+            }
+            
+            // 0 이하인 경우 체크
+            if (numericValue <= 0) {
+              console.log('🔍 [Storage Debug] ⚠️ storage_total_gb가 0 이하의 값:', numericValue);
+              return 'Unknown';
+            }
+            
+            console.log('🔍 [Storage Debug] ✅ storage_total_gb 유효한 값:', rawValue);
+            return rawValue;
+          })()
+        } : (() => {
+          console.log('🔍 [Storage Debug] ❌ hardwareInfo가 null/undefined - 하드웨어 정보 없음');
+          return undefined;
+        })()
       };
+      
+      // 🐛 최종 결과 디버깅 로그
+      console.log('🔍 [Storage Debug] 최종 매핑 결과 - hardware:', result.hardware);
+      if (result.hardware?.storage_total_gb === undefined || result.hardware?.storage_total_gb === 'Unknown') {
+        console.log('🔍 [Storage Debug] ⚠️ storage_total_gb가 정의되지 않음 또는 Unknown');
+      }
       
       console.log(`✅ 노드 ${index + 1} 변환 완료:`, result);
       return result;

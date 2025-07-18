@@ -17,16 +17,16 @@ export function Navigation({ className }: NavigationProps) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   const navItems = [
-    {
-      name: '대시보드',
-      href: '/dashboard',
-      icon: BarChart3,
-    },
-    {
-      name: '노드 관리',
-      href: '/nodes',
-      icon: Server,
-    },
+    // {
+    //   name: '대시보드',
+    //   href: '/dashboard',
+    //   icon: BarChart3,
+    // },
+    // {
+    //   name: '노드 관리',
+    //   href: '/nodes',
+    //   icon: Server,
+    // },
   ];
 
   const handleLogout = () => {
