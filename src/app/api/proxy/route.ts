@@ -19,11 +19,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Authorization 헤더가 필요합니다' }, { status: 401 });
     }
 
-    console.log(`프록시 요청: ${BACKEND_BASE_URL}${target}`);
-    console.log(`Authorization: ${authorization}`);
+    const backendUrl = `${BACKEND_BASE_URL}${target}`;
 
     // 백엔드로 요청 전송
-    const response = await fetch(`${BACKEND_BASE_URL}${target}`, {
+    const response = await fetch(backendUrl, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -31,11 +30,9 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    console.log(`백엔드 응답 상태: ${response.status}`);
-
     if (!response.ok) {
       const errorText = await response.text();
-      console.log(`백엔드 오류 응답: ${errorText}`);
+      console.error(`❌ 백엔드 오류 (${response.status}):`, errorText);
       
       return NextResponse.json(
         { error: `백엔드 오류: ${response.status}`, details: errorText },
@@ -44,12 +41,10 @@ export async function GET(request: NextRequest) {
     }
 
     const data = await response.json();
-    console.log('백엔드 응답 데이터:', data);
-
     return NextResponse.json(data);
 
   } catch (error) {
-    console.error('프록시 오류:', error);
+    console.error('💥 프록시 오류:', error);
     
     return NextResponse.json(
       { error: '프록시 서버 오류', details: error instanceof Error ? error.message : '알 수 없는 오류' },

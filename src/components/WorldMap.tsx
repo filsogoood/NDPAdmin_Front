@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { ComposableMap, Geographies, Geography, Marker, ZoomableGroup } from 'react-simple-maps';
-import { fetchAndTransformNodeData, MapNode } from '@/lib/nodeLocationMapper';
+import { transformApiDataToMapNodes, MapNode } from '@/lib/nodeLocationMapper';
+import { useAutoRefresh } from '@/lib/hooks/useAutoRefresh';
 
 const geoUrl = 'https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json';
 
@@ -13,42 +14,60 @@ interface WorldMapProps {
 
 export function WorldMap({ className = '', authToken }: WorldMapProps) {
   const [nodes, setNodes] = useState<MapNode[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
   const [zoom, setZoom] = useState(30);
   const [center, setCenter] = useState<[number, number]>([127.0, 37.5]);
 
-  // API에서 노드 데이터 가져오기
-  useEffect(() => {
-    const loadNodeData = async () => {
-      if (!authToken) {
-        setError('인증 토큰이 필요합니다.');
-        setLoading(false);
-        return;
-      }
+  console.log('🗺️ WorldMap 컴포넌트 렌더링 시작');
+  console.log('🔑 전달받은 authToken:', authToken ? `${authToken.substring(0, 20)}...` : 'null');
+  console.log('📍 현재 nodes 상태:', nodes.length, '개');
 
-      try {
-        setLoading(true);
-        setError(null);
-        
-        const nodeData = await fetchAndTransformNodeData(authToken);
-        setNodes(nodeData);
-        
-        console.log('로드된 노드 데이터:', nodeData);
-        
-      } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : '노드 데이터를 불러올 수 없습니다.';
-        setError(errorMessage);
-        console.error('노드 데이터 로딩 오류:', err);
-      } finally {
-        setLoading(false);
+  // 콜백 함수들을 useCallback으로 안정화 (무한 재렌더링 방지)
+  const handleSuccess = useCallback(async (apiData: any) => {
+    console.log('🎯🎯🎯 WorldMap onSuccess 콜백 호출됨!!!');
+    console.log('📊 받은 데이터:', apiData);
+    
+    try {
+      // API 데이터를 지도용 노드 데이터로 변환
+      const transformedNodes = await transformApiDataToMapNodes(apiData);
+      console.log('✅ 노드 변환 완료:', transformedNodes.length, '개');
+      
+      if (transformedNodes.length > 0) {
+        setNodes(transformedNodes);
+        console.log('✅ 노드 상태 업데이트 완료');
+      } else {
+        console.warn('⚠️ 변환된 노드가 없습니다');
       }
-    };
+    } catch (error) {
+      console.error('❌ 노드 데이터 변환 실패:', error);
+    }
+  }, []); // 의존성 없음
 
-    loadNodeData();
-  }, [authToken]);
+  const handleError = useCallback((error: Error) => {
+    console.error('❌ 지도 데이터 갱신 실패:', error.message);
+    console.error('❌ 전체 오류 객체:', error);
+  }, []);
+
+  console.log('🔍 handleSuccess 함수 생성:', typeof handleSuccess);
+  console.log('🔍 handleError 함수 생성:', typeof handleError);
+  console.log('🔍 handleSuccess 함수 문자열:', handleSuccess.toString().substring(0, 50) + '...');
+
+  // 30초마다 자동 갱신으로 노드 데이터 가져오기
+  const { loading, error, refresh } = useAutoRefresh(authToken || null, {
+    interval: 10000, // 10초 (테스트용)
+    enabled: !!authToken,
+    onSuccess: handleSuccess,
+    onError: handleError
+  });
+
+  console.log('🔄 useAutoRefresh 상태:');
+  console.log('  - loading:', loading);
+  console.log('  - error:', error);
+  console.log('  - nodes.length:', nodes.length);
+  console.log('  - authToken 존재:', !!authToken);
+  console.log('  - handleSuccess 함수:', typeof handleSuccess);
+  console.log('  - handleError 함수:', typeof handleError);
 
   // 노드 겹침 방지를 위한 위치 조정
   const adjustedNodes = useMemo(() => {
@@ -136,15 +155,7 @@ export function WorldMap({ className = '', authToken }: WorldMapProps) {
 
   const handleRefresh = async () => {
     if (authToken) {
-      setLoading(true);
-      try {
-        const nodeData = await fetchAndTransformNodeData(authToken);
-        setNodes(nodeData);
-      } catch (err) {
-        console.error('새로고침 실패:', err);
-      } finally {
-        setLoading(false);
-      }
+      await refresh();
     }
   };
 
@@ -155,6 +166,10 @@ export function WorldMap({ className = '', authToken }: WorldMapProps) {
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-2"></div>
           <p className="text-gray-400">노드 데이터 로딩 중...</p>
+          <p className="text-gray-500 text-sm mt-1">
+            토큰: {authToken ? '✅ 있음' : '❌ 없음'} | 
+            노드: {nodes.length}개
+          </p>
         </div>
       </div>
     );
@@ -165,7 +180,12 @@ export function WorldMap({ className = '', authToken }: WorldMapProps) {
     return (
       <div className={`w-full h-full flex items-center justify-center bg-gray-800 rounded-lg ${className}`}>
         <div className="text-center">
-          <p className="text-red-400 mb-2">⚠️ {error}</p>
+          <div className="text-red-500 text-4xl mb-2">⚠️</div>
+          <p className="text-red-400 mb-2">{error}</p>
+          <p className="text-gray-500 text-sm mb-4">
+            토큰: {authToken ? '✅ 있음' : '❌ 없음'} | 
+            노드: {nodes.length}개
+          </p>
           <button 
             onClick={handleRefresh}
             className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
@@ -176,6 +196,30 @@ export function WorldMap({ className = '', authToken }: WorldMapProps) {
       </div>
     );
   }
+
+  // 노드가 없는 경우
+  if (nodes.length === 0) {
+    return (
+      <div className={`w-full h-full flex items-center justify-center bg-gray-800 rounded-lg ${className}`}>
+        <div className="text-center">
+          <div className="text-yellow-500 text-4xl mb-2">📍</div>
+          <p className="text-gray-400 mb-2">표시할 노드가 없습니다</p>
+          <p className="text-gray-500 text-sm mb-4">
+            토큰: {authToken ? '✅ 있음' : '❌ 없음'} | 
+            로딩: {loading ? '진행 중' : '완료'}
+          </p>
+          <button 
+            onClick={handleRefresh}
+            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+          >
+            새로고침
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  console.log('🗺️ 지도 렌더링 시작 - 노드 수:', nodes.length);
 
   return (
     <div className={`w-full relative ${className}`}>

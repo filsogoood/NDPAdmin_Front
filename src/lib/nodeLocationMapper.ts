@@ -109,23 +109,31 @@ async function generateCoordinates(
   existingLat?: string, 
   existingLng?: string
 ): Promise<[number, number]> {
+  console.log(`🔄 generateCoordinates 시작 - 주소: ${address}, 기존 위도: ${existingLat}, 기존 경도: ${existingLng}`);
+  
   // 1. 기존 경위도가 모두 있으면 사용
   if (existingLat && existingLng && existingLng !== 'null') {
-    return [parseFloat(existingLng), parseFloat(existingLat)];
+    const result: [number, number] = [parseFloat(existingLng), parseFloat(existingLat)];
+    console.log(`✅ 기존 좌표 사용: ${address} → [${result[0]}, ${result[1]}]`);
+    return result;
   }
   
   // 2. Geocoding API 시도
   try {
+    console.log(`🔄 Geocoding API 호출 시작: ${address}`);
     const coordinates = await geocodingService.getCoordinatesFromAddress(address);
     if (coordinates) {
       console.log(`✅ Geocoding 성공: ${address} → [${coordinates[0]}, ${coordinates[1]}]`);
       return coordinates;
+    } else {
+      console.warn(`⚠️ Geocoding API 결과 없음: ${address}`);
     }
   } catch (error) {
     console.warn(`⚠️ Geocoding API 실패: ${address}`, error);
   }
   
   // 3. Fallback: 하드코딩된 도시 좌표 사용
+  console.log(`🔄 Fallback 좌표 사용 시작: ${address}`);
   const cityKey = extractCityFromAddress(address);
   const fallbackCoords = FALLBACK_COORDINATES[cityKey] || FALLBACK_COORDINATES.default;
   
@@ -137,9 +145,10 @@ async function generateCoordinates(
   const offsetLng = (Math.random() - 0.5) * 0.01; // ±500m
   const offsetLat = (Math.random() - 0.5) * 0.01;
   
-  console.log(`🔄 Fallback 사용: ${address} → [${finalLng + offsetLng}, ${finalLat + offsetLat}]`);
+  const result: [number, number] = [finalLng + offsetLng, finalLat + offsetLat];
+  console.log(`✅ Fallback 좌표 생성 완료: ${address} → [${result[0]}, ${result[1]}]`);
   
-  return [finalLng + offsetLng, finalLat + offsetLat];
+  return result;
 }
 
 // 지역 정보 추출
@@ -184,76 +193,122 @@ function mapNodeStatus(status: string): 'active' | 'warning' | 'error' | 'pre' {
 
 // API 데이터를 지도용 노드 데이터로 변환 (비동기)
 export async function transformApiDataToMapNodes(apiData: ApiNodeData): Promise<MapNode[]> {
+  console.log('🚀 transformApiDataToMapNodes 함수 시작');
+  
+  if (!apiData) {
+    console.error('❌ apiData가 null 또는 undefined입니다.');
+    return [];
+  }
+
+  console.log('📊 입력 데이터 확인:', {
+    nanodc: apiData.nanodc?.length || 0,
+    nodes: apiData.nodes?.length || 0,
+    node_usage: apiData.node_usage?.length || 0,
+    hardware_specs: apiData.hardware_specs?.length || 0
+  });
+
   const { nodes, nanodc, node_usage, hardware_specs } = apiData;
   
+  if (!nanodc || !Array.isArray(nanodc)) {
+    console.error('❌ nanodc가 배열이 아닙니다:', nanodc);
+    return [];
+  }
+
+  if (nanodc.length === 0) {
+    console.warn('⚠️ nanodc 배열이 비어있습니다.');
+    return [];
+  }
+
   console.log(`🚀 ${nanodc.length}개 노드의 좌표 생성 시작...`);
   
-  // 모든 노드의 좌표를 비동기로 생성
-  const nodePromises = nanodc.map(async (location) => {
-    // nanodc_id로 관련 노드 정보 찾기
-    const nodeInfo = nodes.find(node => 
-      node.nanodc_id === location.nanodc_id
-    );
+  try {
+    // 모든 노드의 좌표를 비동기로 생성
+    const nodePromises = nanodc.map(async (location, index) => {
+      console.log(`🔄 노드 ${index + 1}/${nanodc.length} 처리 시작:`, location);
+      
+      // nanodc_id로 관련 노드 정보 찾기
+      const nodeInfo = nodes?.find(node => 
+        node.nanodc_id === location.nanodc_id
+      );
+      
+      if (!nodeInfo) {
+        console.warn(`⚠️ nanodc_id ${location.nanodc_id}에 해당하는 노드를 찾을 수 없습니다.`);
+        return null; // 노드 정보가 없으면 null 반환
+      }
+
+      console.log(`✅ 노드 정보 찾음:`, nodeInfo);
+      
+      // node_id로 사용량 정보 찾기
+      const usageInfo = node_usage?.find(usage => 
+        usage.node_id === nodeInfo.node_id
+      );
+      
+      // node_id로 하드웨어 정보 찾기
+      const hardwareInfo = hardware_specs?.find(hw => 
+        hw.node_id === nodeInfo.node_id
+      );
+      
+      console.log(`🔄 좌표 생성 시작 - 주소: ${location.address}, 위도: ${location.latitude}, 경도: ${location.longtitude}`);
+      
+      // 좌표 생성 (Geocoding API 사용)
+      const coordinates = await generateCoordinates(
+        location.address,
+        location.latitude,
+        location.longtitude
+      );
+      
+      console.log(`✅ 좌표 생성 완료:`, coordinates);
+      
+      const { region, district } = extractRegionInfo(location.address);
+      
+      const result = {
+        id: nodeInfo.node_id,
+        name: nodeInfo.node_name || location.name,
+        coordinates,
+        status: mapNodeStatus(nodeInfo.status),
+        region,
+        district,
+        nodeCount: 1,
+        address: location.address,
+        ip: location.ip,
+        usage: usageInfo ? {
+          cpu: parseFloat(usageInfo.cpu_usage_percent),
+          memory: parseFloat(usageInfo.mem_usage_percent),
+          gpu: parseFloat(usageInfo.gpu_usage_percent),
+          temperature: parseFloat(usageInfo.gpu_temp),
+          storage: parseInt(usageInfo.used_storage_gb)
+        } : undefined,
+        hardware: hardwareInfo ? {
+          cpu_model: hardwareInfo.cpu_model,
+          cpu_cores: hardwareInfo.cpucores,
+          gpu_model: hardwareInfo.gpu_model,
+          gpu_count: hardwareInfo.gpu_count,
+          total_ram_gb: hardwareInfo.total_ram_gb,
+          storage_total_gb: hardwareInfo.storage_total_gb
+        } : undefined
+      };
+      
+      console.log(`✅ 노드 ${index + 1} 변환 완료:`, result);
+      return result;
+    });
     
-    if (!nodeInfo) {
-      console.warn(`⚠️ nanodc_id ${location.nanodc_id}에 해당하는 노드를 찾을 수 없습니다.`);
-      return null; // 노드 정보가 없으면 null 반환
-    }
+    console.log('🔄 모든 노드 비동기 처리 대기 중...');
     
-    // node_id로 사용량 정보 찾기
-    const usageInfo = node_usage.find(usage => 
-      usage.node_id === nodeInfo.node_id
-    );
+    // null 값 제거 후 유효한 노드만 반환
+    const mapNodesWithNull = await Promise.all(nodePromises);
+    console.log('✅ Promise.all 완료, 결과:', mapNodesWithNull.length, '개');
     
-    // node_id로 하드웨어 정보 찾기
-    const hardwareInfo = hardware_specs.find(hw => 
-      hw.node_id === nodeInfo.node_id
-    );
+    const mapNodes = mapNodesWithNull.filter((node): node is MapNode => node !== null);
+    console.log('✅ null 필터링 완료:', mapNodes.length, '개');
     
-    // 좌표 생성 (Geocoding API 사용)
-    const coordinates = await generateCoordinates(
-      location.address,
-      location.latitude,
-      location.longtitude
-    );
+    console.log(`✅ ${mapNodes.length}개 노드 좌표 생성 완료`);
     
-    const { region, district } = extractRegionInfo(location.address);
-    
-    return {
-      id: nodeInfo.node_id,
-      name: nodeInfo.node_name || location.name,
-      coordinates,
-      status: mapNodeStatus(nodeInfo.status),
-      region,
-      district,
-      nodeCount: 1,
-      address: location.address,
-      ip: location.ip,
-      usage: usageInfo ? {
-        cpu: parseFloat(usageInfo.cpu_usage_percent),
-        memory: parseFloat(usageInfo.mem_usage_percent),
-        gpu: parseFloat(usageInfo.gpu_usage_percent),
-        temperature: parseFloat(usageInfo.gpu_temp),
-        storage: parseInt(usageInfo.used_storage_gb)
-      } : undefined,
-      hardware: hardwareInfo ? {
-        cpu_model: hardwareInfo.cpu_model,
-        cpu_cores: hardwareInfo.cpucores,
-        gpu_model: hardwareInfo.gpu_model,
-        gpu_count: hardwareInfo.gpu_count,
-        total_ram_gb: hardwareInfo.total_ram_gb,
-        storage_total_gb: hardwareInfo.storage_total_gb
-      } : undefined
-    };
-  });
-  
-  // null 값 제거 후 유효한 노드만 반환
-  const mapNodesWithNull = await Promise.all(nodePromises);
-  const mapNodes = mapNodesWithNull.filter((node): node is MapNode => node !== null);
-  
-  console.log(`✅ ${mapNodes.length}개 노드 좌표 생성 완료`);
-  
-  return mapNodes;
+    return mapNodes;
+  } catch (error) {
+    console.error('❌ transformApiDataToMapNodes 오류:', error);
+    console.error('❌ 오류 스택:', error instanceof Error ? error.stack : '스택 없음');
+    return [];
+  }
 }
 
 // 동일 위치 노드 클러스터링 처리

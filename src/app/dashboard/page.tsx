@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Navigation } from '@/components/Navigation';
 import { Card, CardContent } from '@/components/Card';
 import { WorldMap } from '@/components/WorldMap';
 import { authService } from '@/lib/auth';
+import { useAutoRefresh } from '@/lib/hooks/useAutoRefresh';
 import { apiClient } from '@/lib/api';
 import { 
   Globe,
@@ -15,7 +16,10 @@ import {
   Cpu,
   HardDrive,
   Thermometer,
-  Activity
+  Activity,
+  RefreshCw,
+  Pause,
+  Play
 } from 'lucide-react';
 
 interface NodeSummary {
@@ -44,7 +48,6 @@ export default function DashboardPage() {
     preNodes: 0,
     errorNodes: 0
   });
-  const [loading, setLoading] = useState(true);
   
   // 페이지 로드 시 인증 체크 및 토큰 설정
   useEffect(() => {
@@ -57,63 +60,73 @@ export default function DashboardPage() {
     setAuthToken(token);
   }, [router]);
 
-  // API에서 노드 요약 정보 가져오기
-  useEffect(() => {
-    const fetchNodeSummary = async () => {
-      if (!authToken) return;
+  // 콜백 함수들을 useCallback으로 안정화
+  const handleSuccess = useCallback((data: any) => {
+    // 노드 요약 정보 생성
+    const summaryData: NodeSummary[] = data.nanodc.map((location: any) => {
+      // nanodc_id로 해당하는 노드 찾기
+      const nodeInfo = data.nodes.find((node: any) => 
+        node.nanodc_id === location.nanodc_id
+      );
       
-      try {
-        setLoading(true);
-        const data = await apiClient.getUserData(authToken);
-        
-        // 노드 요약 정보 생성
-        const summaryData: NodeSummary[] = data.nanodc.map((location: any) => {
-          // nanodc_id로 해당하는 노드 찾기
-          const nodeInfo = data.nodes.find((node: any) => 
-            node.nanodc_id === location.nanodc_id
-          );
-          
-          // node_id로 사용량 정보 찾기
-          const usageInfo = nodeInfo ? data.node_usage.find((usage: any) => 
-            usage.node_id === nodeInfo.node_id
-          ) : undefined;
-          
-          return {
-            id: nodeInfo?.node_id || location.nanodc_id,
-            name: nodeInfo?.node_name || location.name,
-            status: nodeInfo?.status || 'unknown',
-            region: location.address,
-            address: location.address,
-            ip: location.ip,
-            usage: usageInfo ? {
-              cpu: usageInfo.cpu_usage_percent,
-              memory: usageInfo.mem_usage_percent,
-              gpu: usageInfo.gpu_usage_percent,
-              temperature: usageInfo.gpu_temp
-            } : undefined
-          };
-        }).filter((summary: NodeSummary) => summary.id); // 유효한 노드만 필터링
-        
-        setNodesSummary(summaryData);
-        
-        // 네트워크 통계 계산
-        const stats = {
-          totalNodes: summaryData.length,
-          activeNodes: summaryData.filter(n => n.status === 'active').length,
-          preNodes: summaryData.filter(n => n.status === 'pre').length,
-          errorNodes: summaryData.filter(n => n.status === 'error').length
-        };
-        setNetworkStats(stats);
-        
-      } catch (error) {
-        console.error('노드 요약 정보 가져오기 실패:', error);
-      } finally {
-        setLoading(false);
-      }
+      // node_id로 사용량 정보 찾기
+      const usageInfo = nodeInfo ? data.node_usage.find((usage: any) => 
+        usage.node_id === nodeInfo.node_id
+      ) : undefined;
+      
+      return {
+        id: nodeInfo?.node_id || location.nanodc_id,
+        name: nodeInfo?.node_name || location.name,
+        status: nodeInfo?.status || 'unknown',
+        region: location.address,
+        address: location.address,
+        ip: location.ip,
+        usage: usageInfo ? {
+          cpu: usageInfo.cpu_usage_percent,
+          memory: usageInfo.mem_usage_percent,
+          gpu: usageInfo.gpu_usage_percent,
+          temperature: usageInfo.gpu_temp
+        } : undefined
+      };
+    }).filter((summary: NodeSummary) => summary.id); // 유효한 노드만 필터링
+    
+    setNodesSummary(summaryData);
+    
+    // 네트워크 통계 계산
+    const stats = {
+      totalNodes: summaryData.length,
+      activeNodes: summaryData.filter(n => n.status === 'active').length,
+      preNodes: summaryData.filter(n => n.status === 'pre').length,
+      errorNodes: summaryData.filter(n => n.status === 'error').length
     };
+    setNetworkStats(stats);
+  }, []);
 
-    fetchNodeSummary();
-  }, [authToken]);
+  const handleError = useCallback((error: Error) => {
+    console.error('❌ 데이터 갱신 실패:', error.message);
+    
+    // 401 오류인 경우 토큰 만료로 판단하고 로그인 페이지로 리다이렉트
+    if (error.message.includes('401') || error.message.includes('인증이 만료')) {
+      authService.logout();
+      router.push('/');
+    }
+  }, [router]);
+
+  // 30초마다 자동 갱신 훅 사용
+  const { 
+    data: apiData, 
+    loading, 
+    error, 
+    lastUpdated, 
+    refresh,
+    isAutoRefreshEnabled,
+    toggleAutoRefresh
+  } = useAutoRefresh(authToken, {
+    interval: 10000, // 10초 (테스트용)
+    enabled: true,
+    onSuccess: handleSuccess,
+    onError: handleError
+  });
 
   const getStatusColor = (status: string) => {
     switch (status.toLowerCase()) {
@@ -141,6 +154,22 @@ export default function DashboardPage() {
     }
   };
 
+  // 토큰 유효성 테스트 함수
+  const testTokenValidity = async () => {
+    if (!authToken) {
+      alert('토큰이 없습니다. 다시 로그인해주세요.');
+      return;
+    }
+
+    try {
+      const data = await apiClient.getUserData(authToken);
+      alert(`토큰이 유효합니다! (${data.nodes?.length || 0}개 노드)`);
+    } catch (error) {
+      console.error('❌ 토큰 유효성 테스트 실패:', error);
+      alert(`토큰 테스트 실패: ${error instanceof Error ? error.message : '알 수 없는 오류'}`);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-900">
       <Navigation />
@@ -148,10 +177,88 @@ export default function DashboardPage() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* 헤더 */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-100 mb-2">네트워크 대시보드</h1>
-          <p className="text-gray-400">
-            NDP 네트워크의 실시간 현황과 성능 지표를 확인하세요
-          </p>
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-100 mb-2">네트워크 대시보드</h1>
+              <p className="text-gray-400">
+                NDP 네트워크의 실시간 현황과 성능 지표를 확인하세요
+              </p>
+            </div>
+            
+            {/* 자동 갱신 제어 패널 */}
+            <div className="flex items-center space-x-4">
+              {/* 마지막 갱신 시간 */}
+              {lastUpdated && (
+                <div className="text-sm text-gray-500">
+                  마지막 갱신: {lastUpdated.toLocaleTimeString()}
+                </div>
+              )}
+              
+              {/* 자동 갱신 상태 표시 */}
+              <div className="flex items-center space-x-2">
+                <div className={`w-2 h-2 rounded-full ${
+                  isAutoRefreshEnabled ? 'bg-green-500 animate-pulse' : 'bg-gray-500'
+                }`}></div>
+                <span className="text-sm text-gray-400">
+                  자동 갱신 {isAutoRefreshEnabled ? '활성' : '비활성'}
+                </span>
+              </div>
+              
+              {/* 제어 버튼 */}
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={testTokenValidity}
+                  className="px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm rounded-md transition-colors"
+                  title="토큰 유효성 테스트"
+                >
+                  토큰 테스트
+                </button>
+                
+                <button
+                  onClick={toggleAutoRefresh}
+                  className={`p-2 rounded-md transition-colors ${
+                    isAutoRefreshEnabled 
+                      ? 'bg-green-600 hover:bg-green-700 text-white' 
+                      : 'bg-gray-600 hover:bg-gray-700 text-gray-200'
+                  }`}
+                  title={isAutoRefreshEnabled ? '자동 갱신 중지' : '자동 갱신 시작'}
+                >
+                  {isAutoRefreshEnabled ? (
+                    <Pause className="h-4 w-4" />
+                  ) : (
+                    <Play className="h-4 w-4" />
+                  )}
+                </button>
+                
+                <button
+                  onClick={refresh}
+                  disabled={loading}
+                  className="p-2 rounded-md bg-blue-600 hover:bg-blue-700 text-white transition-colors disabled:opacity-50"
+                  title="수동 새로고침"
+                >
+                  <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                </button>
+              </div>
+            </div>
+          </div>
+          
+          {/* 에러 메시지 표시 */}
+          {error && (
+            <div className="mt-4 p-4 bg-red-900/20 border border-red-500/30 rounded-lg">
+              <div className="flex items-center space-x-2">
+                <div className="w-4 h-4 bg-red-500 rounded-full flex-shrink-0"></div>
+                <p className="text-red-400 text-sm">
+                  {error}
+                </p>
+                <button
+                  onClick={refresh}
+                  className="ml-auto px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded-md transition-colors"
+                >
+                  다시 시도
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* 네트워크 요약 통계 */}

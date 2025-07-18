@@ -66,11 +66,14 @@ export class ApiClient {
         
         // 프록시에서 오는 에러 정보도 포함
         const errorData = await response.json().catch(() => ({}));
+        console.error('❌ 서버 오류:', errorData);
         throw new Error(`서버에서 오류가 발생했습니다. (${response.status}) - ${errorData.error || errorData.details || ''}`);
       }
 
-      return response.json();
+      const data = await response.json();
+      return data;
     } catch (error) {
+      console.error('💥 API 클라이언트 오류:', error);
       if (error instanceof Error) {
         throw error;
       }

@@ -10,13 +10,18 @@ export class GeocodingService {
   private cache: Map<string, GeocodeResult> = new Map();
 
   async getCoordinatesFromAddress(address: string): Promise<[number, number] | null> {
+    console.log(`🌍 GeocodingService.getCoordinatesFromAddress 시작: ${address}`);
+    
     try {
       // 캐시 확인
       if (this.cache.has(address)) {
         const cached = this.cache.get(address)!;
+        console.log(`✅ 캐시에서 찾음: ${address} → [${cached.lng}, ${cached.lat}]`);
         return [cached.lng, cached.lat];
       }
 
+      console.log(`🔄 지오코딩 API 호출 시작: ${address}`);
+      
       // API 호출
       const response = await fetch('/api/geocoding', {
         method: 'POST',
@@ -26,22 +31,27 @@ export class GeocodingService {
         body: JSON.stringify({ address }),
       });
 
+      console.log(`📡 지오코딩 API 응답 상태: ${response.status} ${response.statusText}`);
+
       if (!response.ok) {
-        console.warn(`Geocoding 실패 (${response.status}): ${address}`);
+        console.warn(`⚠️ 지오코딩 API 실패 (${response.status}): ${address}`);
         return null;
       }
 
       const result: GeocodeResult = await response.json();
+      console.log(`✅ 지오코딩 API 응답 받음:`, result);
       
       // 캐시에 저장
       this.cache.set(address, result);
+      console.log(`💾 캐시에 저장: ${address}`);
       
-      console.log(`Geocoding 성공: ${address} → [${result.lng}, ${result.lat}]`);
+      console.log(`✅ 지오코딩 성공: ${address} → [${result.lng}, ${result.lat}]`);
       
       return [result.lng, result.lat]; // [경도, 위도] 순서
       
     } catch (error) {
-      console.error(`Geocoding 오류: ${address}`, error);
+      console.error(`❌ 지오코딩 오류: ${address}`, error);
+      console.error(`❌ 오류 스택:`, error instanceof Error ? error.stack : '스택 없음');
       return null;
     }
   }
@@ -73,14 +83,15 @@ export class GeocodingService {
     return results;
   }
 
-  // 캐시 클리어
-  clearCache(): void {
+  clearCache() {
+    console.log('🗑️ 지오코딩 캐시 클리어');
     this.cache.clear();
   }
 
-  // 캐시 상태 확인
-  getCacheSize(): number {
-    return this.cache.size;
+  getCacheSize() {
+    const size = this.cache.size;
+    console.log(`📊 현재 캐시 크기: ${size}개`);
+    return size;
   }
 }
 
