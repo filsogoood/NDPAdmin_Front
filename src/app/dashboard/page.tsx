@@ -5,9 +5,12 @@ import { useRouter } from 'next/navigation';
 import { Navigation } from '@/components/Navigation';
 import { Card, CardContent } from '@/components/Card';
 import { WorldMap } from '@/components/WorldMap';
+import { NodeDetailPanel } from '@/components/NodeDetailPanel';
 import { authService } from '@/lib/auth';
 import { useAutoRefresh } from '@/lib/hooks/useAutoRefresh';
 import { apiClient } from '@/lib/api';
+import { convertNodeSummaryToMapNode } from '@/lib/utils';
+import { MapNode } from '@/lib/nodeLocationMapper';
 import { 
   Globe,
   ChevronDown,
@@ -48,6 +51,10 @@ export default function DashboardPage() {
     preNodes: 0,
     errorNodes: 0
   });
+  
+  // 노드 상세 패널 상태
+  const [selectedNode, setSelectedNode] = useState<MapNode | null>(null);
+  const [isPanelOpen, setIsPanelOpen] = useState(false);
   
   // 페이지 로드 시 인증 체크 및 토큰 설정
   useEffect(() => {
@@ -152,6 +159,19 @@ export default function DashboardPage() {
       default:
         return '알 수 없음';
     }
+  };
+
+  // 노드 클릭 핸들러
+  const handleNodeClick = (node: NodeSummary) => {
+    const mapNode = convertNodeSummaryToMapNode(node);
+    setSelectedNode(mapNode);
+    setIsPanelOpen(true);
+  };
+
+  // 패널 닫기 핸들러
+  const closePanel = () => {
+    setIsPanelOpen(false);
+    setTimeout(() => setSelectedNode(null), 300); // 애니메이션 후 선택 해제
   };
 
   // 토큰 유효성 테스트 함수
@@ -334,7 +354,7 @@ export default function DashboardPage() {
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* 지도 영역 */}
                 <div className="lg:col-span-2">
-                  <div className="h-96 bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
+                  <div className="h-96 bg-gray-800 rounded-lg border border-gray-700">
                     {authToken ? (
                       <WorldMap className="h-full" authToken={authToken} />
                     ) : (
@@ -389,6 +409,7 @@ export default function DashboardPage() {
                               <div
                                 key={node.id}
                                 className="p-3 bg-gray-700 border border-gray-600 rounded-lg hover:bg-gray-600 transition-all duration-200 cursor-pointer"
+                                onClick={() => handleNodeClick(node)}
                               >
                                 <div className="flex justify-between items-start">
                                   <div className="flex-1 min-w-0">
@@ -467,6 +488,13 @@ export default function DashboardPage() {
           </Card>
         </div>
       </main>
+
+      {/* 노드 상세 패널 */}
+      <NodeDetailPanel 
+        node={selectedNode}
+        isOpen={isPanelOpen}
+        onClose={closePanel}
+      />
     </div>
   );
 }

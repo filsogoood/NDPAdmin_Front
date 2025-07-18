@@ -109,6 +109,11 @@ export function useAutoRefresh<T = any>(
     setIsAutoRefreshEnabled(prev => !prev);
   }, []);
 
+  // enabled prop이 변경될 때 isAutoRefreshEnabled 업데이트
+  useEffect(() => {
+    setIsAutoRefreshEnabled(enabled);
+  }, [enabled]);
+
   // 수동 새로고침
   const refresh = useCallback(async () => {
     await fetchData();

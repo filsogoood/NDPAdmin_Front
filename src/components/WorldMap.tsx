@@ -4,6 +4,7 @@ import { useState, useMemo, useCallback } from 'react';
 import { ComposableMap, Geographies, Geography, Marker, ZoomableGroup } from 'react-simple-maps';
 import { transformApiDataToMapNodes, MapNode } from '@/lib/nodeLocationMapper';
 import { useAutoRefresh } from '@/lib/hooks/useAutoRefresh';
+import { NodeDetailPanel } from '@/components/NodeDetailPanel';
 
 const geoUrl = 'https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json';
 
@@ -15,7 +16,9 @@ interface WorldMapProps {
 export function WorldMap({ className = '', authToken }: WorldMapProps) {
   const [nodes, setNodes] = useState<MapNode[]>([]);
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
-  const [selectedNode, setSelectedNode] = useState<string | null>(null);
+  const [selectedNode, setSelectedNode] = useState<MapNode | null>(null);
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null); // 선택된 노드 ID 추가
+  const [isPanelOpen, setIsPanelOpen] = useState(false);
   const [zoom, setZoom] = useState(30);
   const [center, setCenter] = useState<[number, number]>([127.0, 37.5]);
 
@@ -35,6 +38,26 @@ export function WorldMap({ className = '', authToken }: WorldMapProps) {
       
       if (transformedNodes.length > 0) {
         setNodes(transformedNodes);
+        
+        // 선택된 노드가 있으면 새 데이터에서 같은 ID의 노드를 찾아서 업데이트
+        setSelectedNodeId((currentSelectedNodeId) => {
+          if (currentSelectedNodeId) {
+            const updatedSelectedNode = transformedNodes.find(node => node.id === currentSelectedNodeId);
+            if (updatedSelectedNode) {
+              setSelectedNode(updatedSelectedNode);
+              console.log('✅ 선택된 노드 업데이트:', updatedSelectedNode.name);
+              return currentSelectedNodeId;
+            } else {
+              // 선택된 노드가 새 데이터에 없으면 패널 닫기
+              console.log('⚠️ 선택된 노드가 새 데이터에 없음, 패널 닫기');
+              setSelectedNode(null);
+              setIsPanelOpen(false);
+              return null;
+            }
+          }
+          return currentSelectedNodeId;
+        });
+        
         console.log('✅ 노드 상태 업데이트 완료');
       } else {
         console.warn('⚠️ 변환된 노드가 없습니다');
@@ -42,7 +65,7 @@ export function WorldMap({ className = '', authToken }: WorldMapProps) {
     } catch (error) {
       console.error('❌ 노드 데이터 변환 실패:', error);
     }
-  }, []); // 의존성 없음
+  }, []); // 의존성 배열을 비워서 함수가 재생성되지 않도록 함
 
   const handleError = useCallback((error: Error) => {
     console.error('❌ 지도 데이터 갱신 실패:', error.message);
@@ -53,10 +76,10 @@ export function WorldMap({ className = '', authToken }: WorldMapProps) {
   console.log('🔍 handleError 함수 생성:', typeof handleError);
   console.log('🔍 handleSuccess 함수 문자열:', handleSuccess.toString().substring(0, 50) + '...');
 
-  // 30초마다 자동 갱신으로 노드 데이터 가져오기
+  // 30초마다 자동 갱신으로 노드 데이터 가져오기 (패널이 닫혀있을 때만)
   const { loading, error, refresh } = useAutoRefresh(authToken || null, {
-    interval: 10000, // 10초 (테스트용)
-    enabled: !!authToken,
+    interval: 30000, // 30초
+    enabled: !!authToken && !isPanelOpen, // 패널이 열려있을 때는 갱신 중지
     onSuccess: handleSuccess,
     onError: handleError
   });
@@ -144,13 +167,28 @@ export function WorldMap({ className = '', authToken }: WorldMapProps) {
 
   const handleNodeClick = (nodeId: string, event: any) => {
     event.stopPropagation();
-    setSelectedNode(selectedNode === nodeId ? null : nodeId);
+    const clickedNode = nodes.find(n => n.id === nodeId);
+    if (clickedNode) {
+      setSelectedNode(clickedNode);
+      setSelectedNodeId(nodeId); // 노드 ID도 함께 저장
+      setIsPanelOpen(true);
+      console.log('🎯 노드 선택됨:', clickedNode.name, 'ID:', nodeId);
+    }
+  };
+
+  const handlePanelClose = () => {
+    setIsPanelOpen(false);
+    setSelectedNodeId(null); // 선택된 노드 ID도 초기화
+    setTimeout(() => setSelectedNode(null), 300); // 애니메이션 후 선택 해제
+    console.log('🔒 패널 닫힘, 선택 노드 초기화');
   };
 
   const handleReset = () => {
     setZoom(30);
     setCenter([127.0, 37.5]);
     setSelectedNode(null);
+    setSelectedNodeId(null); // 선택된 노드 ID도 초기화
+    setIsPanelOpen(false);
   };
 
   const handleRefresh = async () => {
@@ -248,7 +286,7 @@ export function WorldMap({ className = '', authToken }: WorldMapProps) {
         </div>
         {selectedNode && (
           <div className="text-xs text-blue-400">
-            선택: {nodes.find(n => n.id === selectedNode)?.name}
+            선택: {selectedNode.name}
           </div>
         )}
       </div>
@@ -322,8 +360,8 @@ export function WorldMap({ className = '', authToken }: WorldMapProps) {
           {/* 노드 마커들 */}
           {adjustedNodes
             .sort((a, b) => {
-              if (a.id === selectedNode) return 1;
-              if (b.id === selectedNode) return -1;
+              if (selectedNode && a.id === selectedNode.id) return 1;
+              if (selectedNode && b.id === selectedNode.id) return -1;
               if (a.id === hoveredNode) return 1;
               if (b.id === hoveredNode) return -1;
               return a.nodeCount - b.nodeCount;
@@ -333,7 +371,7 @@ export function WorldMap({ className = '', authToken }: WorldMapProps) {
               const markerAnimation = getMarkerAnimation(node.status);
               const markerSize = getMarkerSize(node.nodeCount);
               const isHovered = hoveredNode === node.id;
-              const isSelected = selectedNode === node.id;
+              const isSelected = selectedNode?.id === node.id;
               
               return (
                 <Marker 
@@ -391,93 +429,45 @@ export function WorldMap({ className = '', authToken }: WorldMapProps) {
                       </text>
                     )}
                     
-                    {/* 상세 툴팁 */}
-                    {(isHovered || isSelected) && (
+                    {/* 간단한 호버 툴팁 */}
+                    {isHovered && !isSelected && (
                       <g style={{ pointerEvents: 'none' }}>
                         <rect
                           x={markerSize.outer + 3 / zoom}
-                          y={-110 / zoom}
-                          width={480 / zoom}
-                          height={node.usage ? 250 / zoom : 200 / zoom}
-                          rx={12 / zoom}
+                          y={-60 / zoom}
+                          width={200 / zoom}
+                          height={60 / zoom}
+                          rx={8 / zoom}
                           fill="#1A202C"
                           stroke="#4A5568"
                           strokeWidth={1 / zoom}
                           opacity={0.95}
                         />
-                        {/* 노드 이름 (타이틀) */}
                         <text
-                          x={markerSize.outer + 16 / zoom}
-                          y={-65 / zoom}
-                          fontSize={28 / zoom}
+                          x={markerSize.outer + 12 / zoom}
+                          y={-35 / zoom}
+                          fontSize={16 / zoom}
                           fill="#F7FAFC"
                           fontWeight="bold"
                         >
                           {node.name}
                         </text>
-                        
-                        {/* 지역 정보 */}
                         <text
-                          x={markerSize.outer + 16 / zoom}
-                          y={-35 / zoom}
-                          fontSize={20 / zoom}
+                          x={markerSize.outer + 12 / zoom}
+                          y={-10 / zoom}
+                          fontSize={14 / zoom}
                           fill="#A0AEC0"
                         >
-                          📍 {node.region}
+                          {node.region}
                         </text>
-                        
-                        {/* 상태 정보 */}
                         <text
-                          x={markerSize.outer + 16 / zoom}
-                          y={-5 / zoom}
-                          fontSize={22 / zoom}
+                          x={markerSize.outer + 12 / zoom}
+                          y={15 / zoom}
+                          fontSize={14 / zoom}
                           fill={markerColor}
-                          fontWeight="bold"
                         >
-                          🔄 상태: {node.status.toUpperCase()}
+                          {node.status.toUpperCase()}
                         </text>
-                        
-                        {/* IP 주소 */}
-                        <text
-                          x={markerSize.outer + 16 / zoom}
-                          y={25 / zoom}
-                          fontSize={18 / zoom}
-                          fill="#A0AEC0"
-                        >
-                          🌐 IP: {node.ip}
-                        </text>
-                        
-                        {/* 좌표 정보 */}
-                        <text
-                          x={markerSize.outer + 16 / zoom}
-                          y={55 / zoom}
-                          fontSize={16 / zoom}
-                          fill="#718096"
-                        >
-                          📊 좌표: {node.coordinates[0].toFixed(4)}, {node.coordinates[1].toFixed(4)}
-                        </text>
-                        
-                        {/* 사용량 정보 */}
-                        {node.usage && (
-                          <>
-                            <text
-                              x={markerSize.outer + 16 / zoom}
-                              y={90 / zoom}
-                              fontSize={18 / zoom}
-                              fill="#68D391"
-                            >
-                              💻 CPU: {node.usage.cpu}% | 📝 메모리: {node.usage.memory}%
-                            </text>
-                            <text
-                              x={markerSize.outer + 16 / zoom}
-                              y={120 / zoom}
-                              fontSize={18 / zoom}
-                              fill="#68D391"
-                            >
-                              🎮 GPU: {node.usage.gpu}% | 🌡️ 온도: {node.usage.temperature}°C
-                            </text>
-                          </>
-                        )}
                       </g>
                     )}
                   </g>
@@ -486,6 +476,13 @@ export function WorldMap({ className = '', authToken }: WorldMapProps) {
             })}
         </ZoomableGroup>
       </ComposableMap>
+      
+      {/* 노드 상세 정보 패널 */}
+      <NodeDetailPanel 
+        node={selectedNode}
+        isOpen={isPanelOpen}
+        onClose={handlePanelClose}
+      />
     </div>
   );
 }

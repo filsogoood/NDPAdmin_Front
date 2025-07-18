@@ -5,10 +5,11 @@ import { useRouter } from 'next/navigation';
 import { Navigation } from '@/components/Navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/Card';
 import { StatusBadge } from '@/components/StatusBadge';
-import { NodeDetailModal } from '@/components/NodeDetailModal';
+import { NodeDetailPanel } from '@/components/NodeDetailPanel';
 import { Node } from '@/lib/types';
+import { MapNode } from '@/lib/nodeLocationMapper';
 import { allNodes } from '@/lib/mockData';
-import { formatRelativeTime, getPerformanceLevel } from '@/lib/utils';
+import { formatRelativeTime, getPerformanceLevel, convertNodeToMapNode } from '@/lib/utils';
 import { authService } from '@/lib/auth';
 import { 
   Search, 
@@ -39,8 +40,8 @@ export default function NodesPage() {
     return allNodes;
   }, []);
   
-  const [selectedNode, setSelectedNode] = useState<Node | null>(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedNode, setSelectedNode] = useState<MapNode | null>(null);
+  const [isPanelOpen, setIsPanelOpen] = useState(false);
   const [isNodeListCollapsed, setIsNodeListCollapsed] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -106,13 +107,14 @@ export default function NodesPage() {
   }, [nodes, searchTerm, statusFilter, sortBy, sortOrder]);
 
   const handleNodeClick = (node: Node) => {
-    setSelectedNode(node);
-    setIsModalOpen(true);
+    const mapNode = convertNodeToMapNode(node);
+    setSelectedNode(mapNode);
+    setIsPanelOpen(true);
   };
 
-  const closeModal = () => {
-    setIsModalOpen(false);
-    setSelectedNode(null);
+  const closePanel = () => {
+    setIsPanelOpen(false);
+    setTimeout(() => setSelectedNode(null), 300); // 애니메이션 후 선택 해제
   };
 
   const getHardwareSpec = (node: Node, type: string) => {
@@ -363,11 +365,11 @@ export default function NodesPage() {
 
       </main>
 
-      {/* 노드 상세 모달 */}
-      <NodeDetailModal 
+      {/* 노드 상세 패널 */}
+      <NodeDetailPanel 
         node={selectedNode}
-        isOpen={isModalOpen}
-        onClose={closeModal}
+        isOpen={isPanelOpen}
+        onClose={closePanel}
       />
     </div>
   );
